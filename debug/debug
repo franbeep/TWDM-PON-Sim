@@ -1,0 +1,15 @@
+# # DEBUG:
+# for i in range(len(splitters)):
+#     print("\nSplitter #" + str(i))
+#     print("upstream_target (Splitter 1nd): " + str(splitters[i].upstream_target))
+#     print("downstream_target (ONUS): ")
+#     for e in splitters[i].downstream_target:
+#         print("ONU #" + str(e.oid) + " " + str(e) + " freq: " + str(e.freq) + " splitter: " + str(e.splitter))
+#
+# print("\nOLT " + str(olt) + " LCS:")
+# for i in range(len(olt.LCS)):
+#     print("\nLC #" + str(olt.LCS[i].lcid) + " " + str(olt.LCS[i]))
+# print("\nSeparator " + str(olt.separator))
+# print("Splitter (1nd) " + str(olt.splitter))
+#
+# sys.exit()
