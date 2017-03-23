@@ -156,39 +156,27 @@ class LineCard(object):
         self.delay_downstream = distance / float(Light_Speed)
         self.out = out
 
-        # # para downstream
-        # adist = functools.partial(random.expovariate, exp)
-        # sdist = functools.partial(random.expovariate, 0.01)
-        # self.pg = PacketGenerator(self.env, "LC_PG_" + str(lcid), adist, sdist)
-        # self.pg.out = self
-
         self.downstream = simpy.Store(env)
         self.upstream = simpy.Store(env)
-        # self.action = env.process(self.run())
 
     def put(self, msg, downstream=False, upstream=False):
-        print("LineCard #%d recebeu Packet(src: %s, id: %d)" % (self.lcid, msg.src, msg.id))
+        print("%s recebeu Packet(src: %s, id: %d)" % (self, msg.src, msg.id))
         if(downstream):
             yield self.downstream.put(msg)
         elif(upstream):
             yield self.upstream.put(msg) # packets que chegam
 
-    # def run(self):
-    #     # # para downstream
-    #     # while True:
-    #     #     yield self.env.timeout(self.delay_downstream)
-    #     #     self.splt.put(self.downstream.get(), downstream=True)
-    #     pass
+    def __repr__(self):
+        return "LineCard (id:%d)" % self.lcid
 
 class OLT(object):
     def __init__(self, env, lcs_qty, distance_splitter, distance_lcs, splitters):
         ### controller
-
         self.env = env
         self.LCS = []
 
         # create
-        self.splitter = Splitter(env, distance_downstream=distance_splitter, distance_upstream=distance_lcs, downstream_target=splitters, frequencies=lcs_qty) # primeiro splitter
+        self.splitter = Splitter(env, 0,distance_downstream=distance_splitter, distance_upstream=distance_lcs, downstream_target=splitters, frequencies=lcs_qty) # primeiro splitter
         self.separator = Separator(env, lcs_qty)
         for i in range(lcs_qty):
             self.LCS.append(LineCard(self.env, lcid=i, exp=50, out=self.separator))
@@ -221,8 +209,9 @@ class Separator(object):
             yield self.env.process(self.LCS[msg.freq].put(msg, upstream=True)) # yield?
 
 class Splitter(object):
-    def __init__(self, env, distance_downstream, distance_upstream, downstream_target=None, upstream_target=None, frequencies=0):
+    def __init__(self, env, id, distance_downstream, distance_upstream, downstream_target=None, upstream_target=None, frequencies=0):
         self.env = env
+        self.id = id
         self.distance_downstream = distance_downstream
         self.distance_upstream = distance_upstream
         self.downstream_target = downstream_target
@@ -242,15 +231,22 @@ class Splitter(object):
                 yield self.env.timeout(self.delay_downstream)
                 yield self.env.process(target.put(msg, downstream=True))
         elif(upstream):
-            print(">>> Requesting lambda: " + str(msg.freq) + " from: " + str(msg.src) + " at: " + str(self.env.now))
+            print(">>> %s requested lambda %d from %s at %s" % (self, msg.freq, str(msg.src), str(self.env.now)))
             request = self.res[msg.freq].request()
             yield request
-            print("<<< Accepted request from: " + str(msg.src) + " at: " + str(self.env.now))
+            print("<<< %s accepted request from %s at %s" % (self, str(msg.src), str(self.env.now)))
             if(type(self.upstream_target) is Splitter): # ainda não tem delay, usa o carry
                 yield self.env.process(self.upstream_target.put(msg, upstream=True, carry_delay=(carry_delay + self.delay_upstream))) # carrega o delay para proximo splitter
             else: # ponto final
                 yield self.env.timeout(self.delay_upstream + carry_delay)
+                yield self.env.process(self.upstream_target.put(msg, upstream=True))
             yield self.res[msg.freq].release(request)
+
+    def __repr__(self):
+        if(type(self.upstream_target) is Splitter):
+            return "2nd Splitter (id:%d)" % self.id
+        else:
+            return "1st Splitter (id:%d)" % self.id
 
 class ONU(object):
     def __init__(self, env, oid, exp, splitter=None, freq=0, distance=0):
@@ -288,18 +284,20 @@ class ONU(object):
 
 ###
 
-# Input do usuario
-ONU_queue_limit     = int(sys.argv[1])
-ONU_quantity        = int(sys.argv[2])
-splitters_ratio     = int(sys.argv[3])
-SIM_DURATION        = int(sys.argv[4])
-RANDOM_SEED         = int(sys.argv[5])
-LCS_quantity        = int(sys.argv[6])
-Distance_OLT_ONU    = int(sys.argv[7])
-Realtime_factor     = float(sys.argv[8])
+ONU_quantity        = int(sys.argv[1])
+splitters_ratio     = int(sys.argv[2])
+SIM_DURATION        = int(sys.argv[3])
+RANDOM_SEED         = int(sys.argv[4])
+LCS_quantity        = int(sys.argv[5])
+Distance_OLT_ONU    = int(sys.argv[6])
 
-# lista as variaveis do simulador
-print("\tVariaveis:\nONU_queue_limit:%d\nONU_quantity:%d\nsplitters_ratio:%d\nSIM_DURATION:%d\nRANDOM_SEED:%d\nLCS_quantity:%d\nDistance_OLT_ONU:%d\nRealtime_factor:%f" % (ONU_queue_limit, ONU_quantity, splitters_ratio, SIM_DURATION, RANDOM_SEED, LCS_quantity, Distance_OLT_ONU, Realtime_factor))
+if(len(sys.argv) > 7):
+    Realtime_factor     = float(sys.argv[7])
+    print("\tVariaveis:\nONU_quantity:%d\nsplitters_ratio:%d\nSIM_DURATION:%d\nRANDOM_SEED:%d\nLCS_quantity:%d\nDistance_OLT_ONU:%d\nRealtime_factor:%f" % ( ONU_quantity, splitters_ratio, SIM_DURATION, RANDOM_SEED, LCS_quantity, Distance_OLT_ONU, Realtime_factor))
+    env = simpy.rt.RealtimeEnvironment(factor=Realtime_factor)
+else:
+    print("\tVariaveis:\nONU_quantity:%d\nsplitters_ratio:%d\nSIM_DURATION:%d\nRANDOM_SEED:%d\nLCS_quantity:%d\nDistance_OLT_ONU:%d" % ( ONU_quantity, splitters_ratio, SIM_DURATION, RANDOM_SEED, LCS_quantity, Distance_OLT_ONU))
+    env = simpy.Environment()
 print("\t---------")
 random.seed(RANDOM_SEED)
 splitters_qty = int((ONU_quantity-1) / splitters_ratio) + 1
@@ -311,17 +309,16 @@ print("onus_per_lc:%s" % onus_per_lc)
 print("\t---------")
 print("\n")
 
-# tipo do environment
-env = simpy.rt.RealtimeEnvironment(factor=Realtime_factor)
-# env = simpy.Environment()
 
 # cria 2nd splitters:
 splitters = []
 oid = 0
 freq = 0
+splitter_ids = 1
 onus_left = splitters_qty * (onus_per_splt) - ONU_quantity
 for i in range(splitters_qty):
-    splt = Splitter(env, 0, Distance_OLT_ONU, frequencies=LCS_quantity) # falta upstream target e downstream target
+    splt = Splitter(env, splitter_ids, 0, Distance_OLT_ONU, frequencies=LCS_quantity) # falta upstream target e downstream target
+    splitter_ids += 1
     left = 0
     if(onus_left > 0):
         left = 1

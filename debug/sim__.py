@@ -253,6 +253,7 @@ class Splitter(object):
                 print("1st Splitter " + str(self) + " resource " + str(msg.freq) + " is owned at " + str(self.env.now))
                 print("<<< Accepted request from: " + str(msg.src) + " at: " + str(self.env.now))
                 yield self.env.timeout(self.delay_upstream + carry_delay)
+                yield self.env.process(self.upstream_target.put(msg, upstream=True))
             yield self.res[msg.freq].release(request)
             if(type(self.upstream_target) is Separator):
                 print("1st Splitter " + str(self) + " resource " + str(msg.freq) + " is released at " + str(self.env.now))
