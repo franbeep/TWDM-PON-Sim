@@ -30,26 +30,29 @@ class Request(object):
         # self.vpon           = vpon # estrutura de dados com info. sobre a VPON e sua VM
 
 class Cellsite(object):
-    def __init__(self, env, id, rrh, users):
+    def __init__(self, env, id, rrh, users, consumption):
         self.env            = env # environment do SimPy
         self.id             = id # identificador :: int
         self.rrh            = rrh # conjunto de RRH(s) :: RRH []
         self.users          = users # usuarios atendidos :: User []
+        self.consumption    = consumption # power consumption :: double
 
 class RRH(object):
-    def __init__(self, env, id, users, mimo_config, status=False):
+    def __init__(self, env, id, users, mimo_config, consumption, status=False):
         self.env            = env
         self.id             = id
         self.users          = users # usuarios atendidos :: User []
         # self.mimo_config    = mimo_config # configuração MIMO
         self.status         = status # ativado/desativado :: bool
+        self.consumption    = consumption # power consumption :: double
 
 class Processing_Node(object):
-    def __init__(self, env, id, servers, status=False):
+    def __init__(self, env, id, servers, consumption, status=False):
         self.env            = env
         self.id             = id
         # self.servers        = servers # servidores
         self.status         = status # ativado/desativado :: bool
+        self.consumption    = consumption # power consumption :: double
 
 class Splitter(object):
     def __init__(self, env, id, target_up, target_down, distance_up, distance_down):
@@ -85,10 +88,12 @@ class VBBU(object):
 
 
 class LineCard(object):
-    def __init__(self, env, freq=0, target):
+    def __init__(self, env, freq=0, target, consumption):
         self.env            = env
         self.freq           = freq # frequencia
         self.target         = target # saida; vBBU
+        self.consumption    = consumption # power consumption :: double
+
 
     # upstreaming
     def send(self, request):
@@ -96,9 +101,10 @@ class LineCard(object):
 
 
 class OLT(object):
-    def __init__(self, env):
+    def __init__(self, env, consumption):
         self.env            = env
         self.action         = env.process(self.run()) # loop
+        self.consumption    = consumption # power consumption :: double
 
     def send(self, request):
         pass
@@ -108,10 +114,11 @@ class OLT(object):
         pass
 
 class ONU(object):
-    def __init__(self, env, id, target, freq=0, distance=0):
+    def __init__(self, env, id, target, consumption,freq=0, distance=0):
         self.env            = env
         self.id             = id
         self.freq           = freq
+        self.consumption    = consumption # power consumption :: double
         self.target         = target
         self.delay_up       = distance / float(Light_Speed)
 
