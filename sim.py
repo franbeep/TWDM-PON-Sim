@@ -150,11 +150,18 @@ class Antenna(Traffic_Generator, Active_Node):
         self.store          = simpy.Store(env)
         self.delay          = distance / float(Light_Speed) # delay upstream
         self.consumption_rate = 0 # valor tabelado ?
-
         Traffic_Generator.__init__(self, self.env, self.id, rate_dist, self.store)
         Active_Node.__init__(self, env, enabled, self.consumption_rate, self.env.now)
-
         self.action         = env.process(self.run()) # main loop
+
+    def start(self):
+        self.start_time = self.env.now
+        self.hold = self.store
+        self.enabled = True
+
+    def end(self):
+        self.hold = None
+        self.enabled = False
 
     def run(self):
         while(True):
@@ -163,7 +170,7 @@ class Antenna(Traffic_Generator, Active_Node):
                 if(out != None):
                     yield self.env.timeout(pkt.size / self.self.bitRate)
                     yield self.env.timeout(self.delay)
-                    self.out.put(pkt)
+                    self.out.put(pkt, up=True) # onu
             else:
                 pass
 
@@ -183,16 +190,14 @@ class Splitter(object):
         self.delay_up       = distance_up / float(Light_Speed) # tempo para transmitir upstream :: float
         self.delay_down     = distance_down / float(Light_Speed) # tempo para transmitir downstream :: float
 
-    # upstreaming
-    def send(self, s):
-        yield self.env.timeout(self.delay_up)
-        yield self.env.process(target_up.send(s))
-
-    # downstreaming
-    def receive(self, r):
-        yield self.env.timeout(self.delay_down) # mesma distancia; possivel mudança
-        for target in target_down:
-            yield self.env.process(target.receive(r))
+    def put(self, pkt, down=False, up=False):
+        yield self.env.timeout(self.delay_down)
+        if(down):
+            for t in self.target_down:
+                t.put(r, down=True)
+        if(up):
+            yield self.env.timeout(self.delay_up)
+            self.target_up.put(s, up=True)
 
 # Grant especifico para DBA
 class Grant(object):
@@ -215,32 +220,35 @@ class DBA_default(Active_Node):
         Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
 
     def send_grant(self, g):
-        self.node.receive(g)
+        self.node.send_down(g)
 
     # todos os vms tem uma função func
     def func(self, r):
-        vpon = None
-        self.env.timeout(self.delay)
-        if(r.vpon >= 0): # ONU com vpon
-            for v in vpons: # acha o vpon da ONU que veio o request
-                if(v.freq == r.vpon):
-                    vpon = v
-            self.send_grant(Grant(self.free_time + r.requested_time, r.bandwidth, vpon.freq))
-        elif(len(vpons) < 0): # nenhum vpon
-            vpon = VPON([r.id_sender], self.freq_available, self.env.now) # cria um vpon
-            self.freq_available += 1
-            self.vpons.append(vpon)
-            self.send_grant(Grant(self.env.now + r.requested_time, r.bandwidth, vpon.freq))
-        else: # algum vpon e onu nao tem vpon
-            for v in vpons: # busca uma vpon que possa colocar onus
-                if(len(v.onus) < self.max_per_vpon):
-                    vpon = v
-            if(vpon == None): # não ha vpons suficientes
-                vpon = VPON([r.id_sender], self.freq_available, self.env.now)
-                self.vpons.append(vpon)
+        if(type(r) is Request):
+            vpon = None
+            self.env.timeout(self.delay)
+            if(r.vpon >= 0): # ONU com vpon
+                for v in vpons: # acha o vpon da ONU que veio o request
+                    if(v.freq == r.vpon):
+                        vpon = v
+                self.send_grant(Grant(self.free_time + r.requested_time, r.bandwidth, vpon.freq))
+            elif(len(vpons) < 0): # nenhum vpon
+                vpon = VPON([r.id_sender], self.freq_available, self.env.now) # cria um vpon
                 self.freq_available += 1
-            self.send_grant(Grant(self.env.now + r.requested_time, r.bandwidth, vpon.freq))
-        return None
+                self.vpons.append(vpon)
+                self.send_grant(Grant(self.env.now + r.requested_time, r.bandwidth, vpon.freq))
+            else: # algum vpon e onu nao tem vpon
+                for v in vpons: # busca uma vpon que possa colocar onus
+                    if(len(v.onus) < self.max_per_vpon):
+                        vpon = v
+                if(vpon == None): # não ha vpons suficientes
+                    vpon = VPON([r.id_sender], self.freq_available, self.env.now)
+                    self.vpons.append(vpon)
+                    self.freq_available += 1
+                self.send_grant(Grant(self.env.now + r.requested_time, r.bandwidth, vpon.freq))
+            return None
+        else:
+            return r
 
 class Processing_Node(Active_Node):
     def __init__(self, env, id, consumption_rate, distance_down, distance_up=0, switch_config=None, targets=[], out=None, enabled=True):
@@ -249,11 +257,11 @@ class Processing_Node(Active_Node):
         self.DU             = None  # digital units :: Digital_Unit []
         self.out            = out   # target upstreaming
         self.targets        = targets # target downstreaming
-        self.distance_up    =
-        self.distance_down  =
-        self.hold           = Simpy.store()
+        self.delay_up       = distance_up / float(Light_Speed)
+        self.delay_down     = distance_down / float(Light_Speed)
 
-        self.switch         = Switch(env, self, self.DU, switch_config) # switch para saida das DUs :: int [][]
+        # self.switch         = Switch.config(self, self.DU, switch_config) # switch para saida das DUs :: int [][]
+        self.switch         = None
         Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
 
     def start(self):
@@ -273,23 +281,39 @@ class Processing_Node(Active_Node):
             du_total += d.consumption()
         return (self.consumption_rate * self.total_time) + du_total
 
-    def send(self, o):
-        du = None
-        for d in DU:
-            if(o.freq == DU.freq):
-                du = d
-        if(d == None and len(DU) > 0): # não tem lc ligado a uma du com tal frequencia
-            du = DU[0]
-        yield self.env.timeout(self.delay_down)
-        yield self.env.process(du.execute_functions(o))
+    def put(self, pkt, down=False, up=False):
+        if(down):
+            for t in self.targets:
+                yield self.env.timeout(self.delay_down)
+                t.put(pkt, down=True)
+        if(up):
+            if(enabled):
+                du = None
+                for d in DU:
+                    if(o.freq == DU.freq):
+                        du = d
+                if(d == None and len(DU) > 0): # não tem lc ligado a uma du com tal frequencia
+                    du = DU[0]
+                yield self.env.process(du.execute_functions(o))
+            else: # desativado
+                self.send_up(pkt, up=True)
 
-    def receive(self, o):
+    def send_up(self, o):
+        if(out != None): # caso da OLT
+            yield self.env.timeout(self.delay_up)
+            self.out.put(o, up=True)
+
+    def send_down(self, o):
+        yield self.env.timeout(self.delay_down)
         for t in self.targets:
-            yield self.env.timeout(self.delay_down)
-            yield self.env.process(t.receive(o))
+            t.put(o, down=True)
+
+    def run(self):
+        while True:
+            if(self.enabled):
 
 class ONU(Active_Node):
-    def __init__(self, env, id, target, consumption, cellsite, enabled=True, freq=-1, distance=0, total_distance=0, threshold=0):
+    def __init__(self, env, id, target, consumption, cellsite, bitRate, rrhs, enabled=True, freq=-1, distance=0, total_distance=0, threshold=0):
         self.env            = env
         self.id             = id
         self.freq           = freq
@@ -297,26 +321,28 @@ class ONU(Active_Node):
         self.target         = target
         self.cellsite       = cellsite # id cellsite
         self.delay_up       = distance / float(Light_Speed)
+        self.rrhs           = rrhs
         self.hold           = [] # pks upstream
         self.grants         = [] # grants recebidos
         self.requests       = [] # requests gerados para serem enviados
         self.request_counting = 0
-        self.bitRate        = 40000000 # rate de 40gb/s
+        self.bitRate        = bitRate # rate de 40gb/s ?
         self.total_distance = total_distance
         self.threshold      = threshold
-
         Active_Node.__init__(self, env, enabled, consumption, self.env.now)
-
         self.action = env.process(self.run()) # loop
 
     # receiving new packets
-    def put(self, pkt):
-        self.hold.append(pkt)
-        total = 0
-        for p in hold:
-            total += p.size
-        if(total > self.threshold):
-            self.gen_request()
+    def put(self, pkt, down=False, up=False):
+        if(down):
+            pass
+        if(up):
+            self.hold.append(pkt)
+            total = 0
+            for p in hold:
+                total += p.size
+            if(total > self.threshold):
+                self.gen_request()
 
     def gen_request(self):
         rrhs = []
@@ -334,36 +360,73 @@ class ONU(Active_Node):
         request_counting += 1
 
     # upstreaming
-    def send(self, s):
+    def send_up(self, s):
         yield self.env.timeout(self.delay_up)
-        self.target.send(s)
+        yield self.env.process(self.target.put(s, up=True))
 
     # downstreaming
-    def receive(self, r):
-        if(!(type(r) is Pacote)): # grant
+    def send_down(self, r):
+        if(type(r) is Grant): # grant
             for g in r:
                 self.grants.append(g)
+        else: # caso em que chegou um pacote
+            pass
 
     def run(self):
         while True:
             if(self.enabled):
-                if(len(self.requests) > 0):
-                    send(self.requests.pop())
-                if(len(self.grants) > 0):
+                if(len(self.requests) > 0): # envia requests
+                    send_up(self.requests.pop())
+                if(len(self.grants) > 0): # envia pacotes
                     for g in self.grants:
-                        if(g.init_time >= self.env.now):
-                            p = self.hold.pop()
+                        if(g.init_time == self.env.now):
+                            p = self.hold[0]
                             p.waited_time = self.env.now - p.init_time
-                            send(p)
                             g.size -= p.size
-                            if(g.size <= 0):
+                            if(g.size >= 0):
+                                yield self.env.process(self.send_up(p))
+                            if(g.size <= 0)
                                 self.grants.remove(g)
                             break
 
 # ainda falta fazer
-class Digital_Unit(Active_Node):
-    pass
+class Digital_Unit(Active_Node): # execute_functions
+    def __init__(self, id, env, consumption_rate, node, out, vms=None, enabled=True):
+        self.id = id
+        self.env = env
+        self.node = node
+        self.vms = vms
+        self.out = out
+        Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
+
+    def append(self, vm): # append vms
+        self.vms.append(vm)
+
+    def execute_functions(self, o):
+        if(self.vms == None):
+            return
+        else:
+            for v in vms:
+                o = yield v.func(o)
+                if(result == None):
+                    break
+            if(o != None):
+                if(self.out is Digital_Unit):
+                    self.out.execute_functions(o)
+                else:
+                    self.out.send_up(o)
 
 # ainda falta fazer
 class Switch(object):
-    pass
+    def config(node, DU, config):
+        for tp in config:
+            d1 = None
+            d2 = None
+            for d in DU:
+                if(d.id == tp[0]):
+                    d1 = d
+                if(d.id == tp[1]):
+                    d2 = d
+            if(d1 == None or d2 == None):
+                break
+            d1.out = d2
