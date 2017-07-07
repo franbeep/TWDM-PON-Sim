@@ -1,20 +1,78 @@
 import simpy
 
-class User(object):
-    pass
+rrh_default_dist = functools.partial(random.expovariate, 0.5) # de teste
+Light_Speed         = 210000 # vel da luz
+
+# objetos geradores de trafego
+# (self, env, id, distribution, hold=None)
+class Traffic_Generator(object):
+    def __init__(self, env, id, distribution, hold=None):
+        self.env              = env
+        self.id               = id
+        self.dist             = distribution
+        self.hold             = hold # armazena os pacotes
+        self.trafic_action    = env.process(self.trafic_run())
+        self.packets_sent     = 0
+
+
+    def trafic_run(self):
+        while True:
+            yield self.env.timeout(self.dist())
+            p = Pacote(50, self.packets_sent, id, -1, self.env.now)
+            if (!(hold == None)):
+                self.hold.put(p) # adiciona a array que contem os pacotes gerados
+                self.packets_sent += 1
+
+# objetos ativos; que consomem energia
+# (self, env, enabled, consumption_rate, start_time=0.0)
+class Active_Node(object):
+    def __init__(self, env, enabled, consumption_rate, start_time=0.0):
+        self.env              = env
+        self.enabled          = enabled # ativado/desativado :: bool
+        self.consumption_rate = consumption_rate # power consumption :: double
+        self.start_time       = start_time
+        self.total_time       = 0.0
+        self.an_action        = env.process(self.an_run())
+
+    def start(self):
+        self.start_time = self.env.now
+        self.enabled = True
+
+    def end(self):
+        self.enabled = False
+
+    def consumption(self):
+        return self.consumption_rate * self.total_time
+
+    def an_run(self):
+        elapsed_time = 0
+        while(True):
+            if(self.enabled):
+                elapsed_time = self.env.now - self.start_time - elapsed_time
+                total_time += elapsed_time
+            else:
+                elapsed_time = 0
 
 class Pacote(object):
-    def __init__(self, band_required, req_latency):
-        self.band_required  = band_required
-        self.request_latency= req_latency
+    def __init__(self, id, size, src, dst, init_time):
+        self.id    = id
+        self.size  = size # tamanho
+        self.src   = src # origem
+        self.dst   = dst # destino
+        self.init_time = init_time
+        self.waited_time = 0 # tempo de espera na fila
+        self.freq = -1
 
-class PacoteCPRI(Pacote):
-    def __init__(self, band_required, req_latency):
-        super(band_required, req_latency)
+    def __repr__(self):
+        return "Pacote - source: {}, destination: {}, init_time: {}, waited_time: {}, size: {}, freq: {}".\
+            format(self.src, self.dst, self.init_time, self.waited_time, self.size, self.freq)
 
-class PacoteCOMP(Pacote):
-    def __init__(self, band_required, req_latency):
-        super(band_required, req_latency)
+# class PacoteCPRI(Pacote):
+#     def __init__(self, size, src, dst, init_time):
+#         Pacote.__init__(self, size, src, dst, init_time)
+
+# class PacoteCOMP(Pacote):
+#     def __init__(self, size):
 
 class Request(object):
     def __init__(self, id, id_sender, id_receiver, id_rrh, id_cellsite, requested_time, bandwidth, route, packages, vpon):
@@ -27,33 +85,95 @@ class Request(object):
         self.bandwidth      = bandwidth # largura de banda desejada :: double
         self.route          = route # rota dos nós :: int []
         self.packages       = packages # pacote(s) da requisição :: Pacote []
-        # self.vpon           = vpon # estrutura de dados com info. sobre a VPON e sua VM
+        self.vpon           = vpon # freq do vpon
+        self.freq           = vpon
+
+        def __repr__(self):
+            return "Request - id: {}, id_sender: {}, id_receiver: {}, id_rrh: {}, id_cellsite: {}, requested_time: {}, bandwidth: {}, route: {}, packages: {}, vpon: {}, freq: {}".\
+                format(self.id, self.id_sender, self.id_receiver, self.id_rrh, self.id_cellsite, self.requested_time, self.bandwidth, self.route, self.packages, self.vpon, self.freq)
 
 class Cellsite(object):
-    def __init__(self, env, id, rrh, users, consumption):
+    def __init__(self, env, id, rrh, users, consumption, onus):
         self.env            = env # environment do SimPy
         self.id             = id # identificador :: int
         self.rrh            = rrh # conjunto de RRH(s) :: RRH []
+        self.onus           = onus # conjunto de ONU(s) :: ONU []
         self.users          = users # usuarios atendidos :: User []
-        self.consumption    = consumption # power consumption :: double
 
-class RRH(object):
-    def __init__(self, env, id, users, mimo_config, consumption, status=False):
+    def calcTotalConsumption(self):
+        total = 0
+        for r in self.rrh:
+            total += r.consumption()
+        for o in self.onus:
+            total += onus.consumption()
+        return total
+
+class RRH(Active_Node):
+    def __init__(self, env, id, users, mimo_config, consumption_rate, enabled=True):
+        self.env = env
+        self.id = id
+        self.users = users
+        self.antennas = []
+        Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
+        i = 0
+        for mimo in mimo_config:
+            if(users != None and len(users) >= i-1): # se existir usuarios ja pra antena
+                self.antennas.append(Antenna(self.env, i, users[i], mimo, None, 0))
+            else:
+                self.antennas.append(Antenna(self.env, i, 0, mimo, None, 0))
+            i += 1
+
+    def start(self):
+        self.start_time = self.env.now
+        for ant in antennas:
+            ant.start()
+        self.enabled = True
+
+    def end(self):
+        for ant in antennas:
+            ant.end()
+        self.enabled = False
+
+    def consumption(self):
+        antennas_consumption = 0
+        for ant in antennas:
+            antennas_consumption += ant.consumption()
+        return (self.consumption_rate * self.total_time) + antennas_consumption
+
+class Antenna(Traffic_Generator, Active_Node):
+    def __init__(self, env, id, users, mimo_config, out, distance, enabled=True, rate_dist=rrh_default_dist):
         self.env            = env
         self.id             = id
-        self.users          = users # usuarios atendidos :: User []
-        # self.mimo_config    = mimo_config # configuração MIMO
-        self.status         = status # ativado/desativado :: bool
-        self.consumption    = consumption # power consumption :: double
+        self.users          = users # usuarios atendidos :: int
+        self.bitRate        = mimo_config # configuração MIMO; taxa de transmissão :: int
+        self.out            = out # output
+        self.store          = simpy.Store(env)
+        self.delay          = distance / float(Light_Speed) # delay upstream
+        self.consumption_rate = 0 # valor tabelado ?
 
-class Processing_Node(object):
-    def __init__(self, env, id, servers, consumption, status=False):
-        self.env            = env
-        self.id             = id
-        # self.servers        = servers # servidores
-        self.status         = status # ativado/desativado :: bool
-        self.consumption    = consumption # power consumption :: double
+        Traffic_Generator.__init__(self, self.env, self.id, rate_dist, self.store)
+        Active_Node.__init__(self, env, enabled, self.consumption_rate, self.env.now)
 
+        self.action         = env.process(self.run()) # main loop
+
+    def run(self):
+        while(True):
+            if(self.enabled):
+                pkt = (yield self.store.get())
+                if(out != None):
+                    yield self.env.timeout(pkt.size / self.self.bitRate)
+                    yield self.env.timeout(self.delay)
+                    self.out.put(pkt)
+            else:
+                pass
+
+class VPON(object):
+    def __init__(self, onus, freq, now):
+        self.onus = onus # onus conectadas
+        self.freq = freq # frequencia
+        self.free_time = now # tempo em que esta livre
+
+# Splitter passivo; demultiplexador
 class Splitter(object):
     def __init__(self, env, id, target_up, target_down, distance_up, distance_down):
         self.env            = env
@@ -64,73 +184,186 @@ class Splitter(object):
         self.delay_down     = distance_down / float(Light_Speed) # tempo para transmitir downstream :: float
 
     # upstreaming
-    def send(self, request):
+    def send(self, s):
         yield self.env.timeout(self.delay_up)
-        yield self.env.process(target_up.send(request))
+        yield self.env.process(target_up.send(s))
 
     # downstreaming
-    def receive(self, request):
+    def receive(self, r):
         yield self.env.timeout(self.delay_down) # mesma distancia; possivel mudança
         for target in target_down:
-            yield self.env.process(target.receive(request))
+            yield self.env.process(target.receive(r))
 
-class VBBU(object):
-    def __init__(self, env, target, VPF=[]):
+# Grant especifico para DBA
+class Grant(object):
+    def __init__(self, onu, init_time, size, freq):
+        self.onu = onu # onu alvo
+        self.init_time = init_time # tempo para começar a transmitir
+        self.size = size # tamanho do grant
+        self.freq = freq # frequencia para transmitir
+
+# VDBA
+class DBA_default(Active_Node):
+    def __init__(self, env, vpons, node, consumption_rate, delay=0, enabled=True):
+        self.env = env
+        self.vpons = vpons
+        self.max_per_vpon = 6 # numero maximo de onus por vpon (?)
+        self.freq_available = 0 # proxima frequencia disponivel
+        self.node = node
+        self.delay = delay # delay para execucao da funcao
+
+        Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
+
+    def send_grant(self, g):
+        self.node.receive(g)
+
+    # todos os vms tem uma função func
+    def func(self, r):
+        vpon = None
+        self.env.timeout(self.delay)
+        if(r.vpon >= 0): # ONU com vpon
+            for v in vpons: # acha o vpon da ONU que veio o request
+                if(v.freq == r.vpon):
+                    vpon = v
+            self.send_grant(Grant(self.free_time + r.requested_time, r.bandwidth, vpon.freq))
+        elif(len(vpons) < 0): # nenhum vpon
+            vpon = VPON([r.id_sender], self.freq_available, self.env.now) # cria um vpon
+            self.freq_available += 1
+            self.vpons.append(vpon)
+            self.send_grant(Grant(self.env.now + r.requested_time, r.bandwidth, vpon.freq))
+        else: # algum vpon e onu nao tem vpon
+            for v in vpons: # busca uma vpon que possa colocar onus
+                if(len(v.onus) < self.max_per_vpon):
+                    vpon = v
+            if(vpon == None): # não ha vpons suficientes
+                vpon = VPON([r.id_sender], self.freq_available, self.env.now)
+                self.vpons.append(vpon)
+                self.freq_available += 1
+            self.send_grant(Grant(self.env.now + r.requested_time, r.bandwidth, vpon.freq))
+        return None
+
+class Processing_Node(Active_Node):
+    def __init__(self, env, id, consumption_rate, distance_down, distance_up=0, switch_config=None, targets=[], out=None, enabled=True):
         self.env            = env
-        self.target         = target
-        self.VPF            = VPF
+        self.id             = id
+        self.DU             = None  # digital units :: Digital_Unit []
+        self.out            = out   # target upstreaming
+        self.targets        = targets # target downstreaming
+        self.distance_up    =
+        self.distance_down  =
+        self.hold           = Simpy.store()
 
-    def add_function(func):
-        self.VPF.append(func)
+        self.switch         = Switch(env, self, self.DU, switch_config) # switch para saida das DUs :: int [][]
+        Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
 
-    def remove_function(func):
-        self.VPF.remove(func)
+    def start(self):
+        self.start_time = self.env.now
+        for d in DU:
+            d.start()
+        self.enabled = True
 
+    def end(self):
+        for d in DU:
+            d.end()
+        self.enabled = False
 
-class LineCard(object):
-    def __init__(self, env, freq=0, target, consumption):
-        self.env            = env
-        self.freq           = freq # frequencia
-        self.target         = target # saida; vBBU
-        self.consumption    = consumption # power consumption :: double
+    def consumption(self):
+        du_total = 0
+        for d in DU:
+            du_total += d.consumption()
+        return (self.consumption_rate * self.total_time) + du_total
 
+    def send(self, o):
+        du = None
+        for d in DU:
+            if(o.freq == DU.freq):
+                du = d
+        if(d == None and len(DU) > 0): # não tem lc ligado a uma du com tal frequencia
+            du = DU[0]
+        yield self.env.timeout(self.delay_down)
+        yield self.env.process(du.execute_functions(o))
 
-    # upstreaming
-    def send(self, request):
-        yield self.env.process(target.send(request))
+    def receive(self, o):
+        for t in self.targets:
+            yield self.env.timeout(self.delay_down)
+            yield self.env.process(t.receive(o))
 
-
-class OLT(object):
-    def __init__(self, env, consumption):
-        self.env            = env
-        self.action         = env.process(self.run()) # loop
-        self.consumption    = consumption # power consumption :: double
-
-    def send(self, request):
-        pass
-
-    # downstreaming
-    def receive(self):
-        pass
-
-class ONU(object):
-    def __init__(self, env, id, target, consumption,freq=0, distance=0):
+class ONU(Active_Node):
+    def __init__(self, env, id, target, consumption, cellsite, enabled=True, freq=-1, distance=0, total_distance=0, threshold=0):
         self.env            = env
         self.id             = id
         self.freq           = freq
         self.consumption    = consumption # power consumption :: double
         self.target         = target
+        self.cellsite       = cellsite # id cellsite
         self.delay_up       = distance / float(Light_Speed)
+        self.hold           = [] # pks upstream
+        self.grants         = [] # grants recebidos
+        self.requests       = [] # requests gerados para serem enviados
+        self.request_counting = 0
+        self.bitRate        = 40000000 # rate de 40gb/s
+        self.total_distance = total_distance
+        self.threshold      = threshold
+
+        Active_Node.__init__(self, env, enabled, consumption, self.env.now)
 
         self.action = env.process(self.run()) # loop
 
+    # receiving new packets
+    def put(self, pkt):
+        self.hold.append(pkt)
+        total = 0
+        for p in hold:
+            total += p.size
+        if(total > self.threshold):
+            self.gen_request()
+
+    def gen_request(self):
+        rrhs = []
+        bandwidth = 0
+        time_needed = 0
+        # requested time seria baseado na distancia total ate OLT? ONU teria como saber isso?
+        for p in hold:
+            rrhs.append(p.src)
+            bandwidth += p.size
+        if(self.total_distance <= 0):
+            time_needed = -1
+        else:
+            time_needed = bandwidth * self.bitRate + total_distance / float (Light_Speed)
+        self.requests.append(Request(request_counting, self.id, -1, rrhs, self.cellsite, time_needed, bandwidth, -1, self.hold, -1))
+        request_counting += 1
+
     # upstreaming
-    def send(self, request):
-        pass
+    def send(self, s):
+        yield self.env.timeout(self.delay_up)
+        self.target.send(s)
 
     # downstreaming
-    def receive(self):
-        pass
+    def receive(self, r):
+        if(!(type(r) is Pacote)): # grant
+            for g in r:
+                self.grants.append(g)
 
     def run(self):
-        pass
+        while True:
+            if(self.enabled):
+                if(len(self.requests) > 0):
+                    send(self.requests.pop())
+                if(len(self.grants) > 0):
+                    for g in self.grants:
+                        if(g.init_time >= self.env.now):
+                            p = self.hold.pop()
+                            p.waited_time = self.env.now - p.init_time
+                            send(p)
+                            g.size -= p.size
+                            if(g.size <= 0):
+                                self.grants.remove(g)
+                            break
+
+# ainda falta fazer
+class Digital_Unit(Active_Node):
+    pass
+
+# ainda falta fazer
+class Switch(object):
+    pass
