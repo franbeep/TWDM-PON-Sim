@@ -1,7 +1,11 @@
 import simpy
+import functools
+import random
 
-rrh_default_dist = functools.partial(random.expovariate, 0.5) # de teste
+rrh_default_dist = functools.partial(random.expovariate, 5.0) # de teste
+traffic_gen_default_size = 50
 Light_Speed         = 210000 # vel da luz
+foo_delay           = 0.0001
 
 # objetos geradores de trafego
 # (self, env, id, distribution, hold=None)
@@ -10,18 +14,21 @@ class Traffic_Generator(object):
         self.env              = env
         self.id               = id
         self.dist             = distribution
-        self.hold             = hold # armazena os pacotes
+        self.hold             = hold # armazena os Packets
         self.trafic_action    = env.process(self.trafic_run())
         self.packets_sent     = 0
 
-
     def trafic_run(self):
         while True:
-            yield self.env.timeout(self.dist())
-            p = Pacote(50, self.packets_sent, id, -1, self.env.now)
-            if (!(hold == None)):
-                self.hold.put(p) # adiciona a array que contem os pacotes gerados
-                self.packets_sent += 1
+            yield self.env.timeout(self.dist()) # tempo de espera
+            print("Traffic Gen. #" + str(self.id) + " time: " + str(self.env.now))
+            p = Packet(self.packets_sent, traffic_gen_default_size, self.id, -1, self.env.now)
+            print("Gerando " + str(p))
+            while(self.hold == None): # se tiver desativado
+                yield self.env.timeout(foo_delay)
+            self.hold.put(p) # adiciona a array que contem os Packets gerados
+            self.packets_sent += 1
+            yield self.env.timeout(foo_delay)
 
 # objetos ativos; que consomem energia
 # (self, env, enabled, consumption_rate, start_time=0.0)
@@ -31,6 +38,7 @@ class Active_Node(object):
         self.enabled          = enabled # ativado/desativado :: bool
         self.consumption_rate = consumption_rate # power consumption :: double
         self.start_time       = start_time
+        self.elapsed_time     = 0
         self.total_time       = 0.0
         self.an_action        = env.process(self.an_run())
 
@@ -39,21 +47,43 @@ class Active_Node(object):
         self.enabled = True
 
     def end(self):
+        self.total_time += self.elapsed_time
+        self.elapsed_time = 0
         self.enabled = False
 
     def consumption(self):
-        return self.consumption_rate * self.total_time
+        return self.consumption_rate * (self.total_time + self.elapsed_time)
 
     def an_run(self):
-        elapsed_time = 0
         while(True):
             if(self.enabled):
-                elapsed_time = self.env.now - self.start_time - elapsed_time
-                total_time += elapsed_time
-            else:
-                elapsed_time = 0
+                self.elapsed_time = self.env.now - self.start_time
+            yield self.env.timeout(foo_delay) # necessario para não entrar em loop infinito
 
-class Pacote(object):
+class Antenna(Traffic_Generator, Active_Node):
+    def __init__(self, env, id, bitRate, out, distance, enabled=True, rate_dist=rrh_default_dist, consumption_rate=0):
+        self.env            = env # environment
+        self.id             = id # id da antena
+        self.bitRate        = bitRate # taxa de transmissão
+        self.out            = out # saida (possivelmente ONU)
+        self.store          = simpy.Store(self.env)
+        self.delay          = distance / float(Light_Speed) # delay upstream
+        self.consumption_rate = consumption_rate
+        Traffic_Generator.__init__(self, self.env, self.id, rate_dist, self.store)
+        Active_Node.__init__(self, self.env, enabled, self.consumption_rate, self.env.now)
+        self.action         = env.process(self.run()) # main loop
+
+    def run(self):
+        while(True):
+            if(self.enabled):
+                pkt = yield self.store.get() # espera algum dado ser gerado
+                if(self.out != None):
+                    yield self.env.timeout(pkt.size / (self.self.bitRate * 8)) # delay de encaminhamento
+                    yield self.env.timeout(self.delay) # delay de transmissão
+                    self.out.put(pkt, up=True) # coloca na onu
+            yield self.env.timeout(foo_delay)
+
+class Packet(object):
     def __init__(self, id, size, src, dst, init_time):
         self.id    = id
         self.size  = size # tamanho
@@ -64,15 +94,8 @@ class Pacote(object):
         self.freq = -1
 
     def __repr__(self):
-        return "Pacote - source: {}, destination: {}, init_time: {}, waited_time: {}, size: {}, freq: {}".\
-            format(self.src, self.dst, self.init_time, self.waited_time, self.size, self.freq)
-
-# class PacoteCPRI(Pacote):
-#     def __init__(self, size, src, dst, init_time):
-#         Pacote.__init__(self, size, src, dst, init_time)
-
-# class PacoteCOMP(Pacote):
-#     def __init__(self, size):
+        return "Packet - id: {}, source: {}, destination: {}, init_time: {}, waited_time: {}, size: {}, freq: {}".\
+            format(self.id, self.src, self.dst, self.init_time, self.waited_time, self.size, self.freq)
 
 class Request(object):
     def __init__(self, id, id_sender, id_receiver, id_rrh, id_cellsite, requested_time, bandwidth, route, packages, vpon):
@@ -84,7 +107,7 @@ class Request(object):
         self.requested_time = requested_time # fatia do tempo desejado :: double
         self.bandwidth      = bandwidth # largura de banda desejada :: double
         self.route          = route # rota dos nós :: int []
-        self.packages       = packages # pacote(s) da requisição :: Pacote []
+        self.packages       = packages # Packet(s) da requisição :: Packet []
         self.vpon           = vpon # freq do vpon
         self.freq           = vpon
 
@@ -109,19 +132,12 @@ class Cellsite(object):
         return total
 
 class RRH(Active_Node):
-    def __init__(self, env, id, users, mimo_config, consumption_rate, enabled=True):
+    def __init__(self, env, id, users, consumption_rate, antennas, enabled=True):
         self.env = env
         self.id = id
         self.users = users
-        self.antennas = []
+        self.antennas = antennas
         Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
-        i = 0
-        for mimo in mimo_config:
-            if(users != None and len(users) >= i-1): # se existir usuarios ja pra antena
-                self.antennas.append(Antenna(self.env, i, users[i], mimo, None, 0))
-            else:
-                self.antennas.append(Antenna(self.env, i, 0, mimo, None, 0))
-            i += 1
 
     def start(self):
         self.start_time = self.env.now
@@ -140,64 +156,11 @@ class RRH(Active_Node):
             antennas_consumption += ant.consumption()
         return (self.consumption_rate * self.total_time) + antennas_consumption
 
-class Antenna(Traffic_Generator, Active_Node):
-    def __init__(self, env, id, users, mimo_config, out, distance, enabled=True, rate_dist=rrh_default_dist):
-        self.env            = env
-        self.id             = id
-        self.users          = users # usuarios atendidos :: int
-        self.bitRate        = mimo_config # configuração MIMO; taxa de transmissão :: int
-        self.out            = out # output
-        self.store          = simpy.Store(env)
-        self.delay          = distance / float(Light_Speed) # delay upstream
-        self.consumption_rate = 0 # valor tabelado ?
-        Traffic_Generator.__init__(self, self.env, self.id, rate_dist, self.store)
-        Active_Node.__init__(self, env, enabled, self.consumption_rate, self.env.now)
-        self.action         = env.process(self.run()) # main loop
-
-    def start(self):
-        self.start_time = self.env.now
-        self.hold = self.store
-        self.enabled = True
-
-    def end(self):
-        self.hold = None
-        self.enabled = False
-
-    def run(self):
-        while(True):
-            if(self.enabled):
-                pkt = (yield self.store.get())
-                if(out != None):
-                    yield self.env.timeout(pkt.size / self.self.bitRate)
-                    yield self.env.timeout(self.delay)
-                    self.out.put(pkt, up=True) # onu
-            else:
-                pass
-
 class VPON(object):
     def __init__(self, onus, freq, now):
         self.onus = onus # onus conectadas
         self.freq = freq # frequencia
         self.free_time = now # tempo em que esta livre
-
-# Splitter passivo; demultiplexador
-class Splitter(object):
-    def __init__(self, env, id, target_up, target_down, distance_up, distance_down):
-        self.env            = env
-        self.id             = id
-        self.target_up      = target_up # alvo em upstreaming :: Object
-        self.target_down    = target_down # alvo em downstreaming :: Object []
-        self.delay_up       = distance_up / float(Light_Speed) # tempo para transmitir upstream :: float
-        self.delay_down     = distance_down / float(Light_Speed) # tempo para transmitir downstream :: float
-
-    def put(self, pkt, down=False, up=False):
-        yield self.env.timeout(self.delay_down)
-        if(down):
-            for t in self.target_down:
-                t.put(r, down=True)
-        if(up):
-            yield self.env.timeout(self.delay_up)
-            self.target_up.put(s, up=True)
 
 # Grant especifico para DBA
 class Grant(object):
@@ -250,51 +213,75 @@ class DBA_default(Active_Node):
         else:
             return r
 
-class Processing_Node(Active_Node):
-    def __init__(self, env, id, consumption_rate, distance_down, distance_up=0, switch_config=None, targets=[], out=None, enabled=True):
+# Splitter passivo; demultiplexador
+class Splitter(object):
+    def __init__(self, env, id, target_up, target_down, distance_up):
         self.env            = env
         self.id             = id
-        self.DU             = None  # digital units :: Digital_Unit []
+        self.target_up      = target_up # alvo em upstreaming
+        self.target_down    = target_down # alvos em downstreaming
+        sorted(self.target_down, key=lambda target: target.delay_up) # organiza pelo tempo de upstreaming dos peers
+        self.delay_up       = distance_up / float(Light_Speed) # tempo para transmitir upstream
+
+    def put(self, pkt, down=False, up=False):
+        if(down):
+            counted = 0
+            for t in self.target_down:
+                yield self.env.timeout(t.delay_up - counted)
+                counted = t.delay_up
+                t.put(pkt, down=True)
+        if(up):
+            yield self.env.timeout(self.delay_up)
+            self.target_up.put(pkt, up=True)
+
+class Processing_Node(Active_Node):
+    def __init__(self, env, id, consumption_rate, distance_down, distance_up=0, target=None, out=None, enabled=True, DU=None, switch=None, LC=None):
+        self.env            = env
+        self.id             = id
+        self.DU             = DU  # digital units :: Digital_Unit []
+        self.LC             = LC
+        self.switch         = switch
         self.out            = out   # target upstreaming
-        self.targets        = targets # target downstreaming
+        self.target         = target # target downstreaming
         self.delay_up       = distance_up / float(Light_Speed)
         self.delay_down     = distance_down / float(Light_Speed)
-
-        # self.switch         = Switch.config(self, self.DU, switch_config) # switch para saida das DUs :: int [][]
-        self.switch         = None
         Active_Node.__init__(self, env, enabled, consumption_rate, self.env.now)
 
     def start(self):
         self.start_time = self.env.now
         for d in DU:
             d.start()
+        for l in LC:
+            l.start()
         self.enabled = True
 
     def end(self):
         for d in DU:
             d.end()
+        for l in LC:
+            l.end()
         self.enabled = False
 
     def consumption(self):
-        du_total = 0
+        total = 0
         for d in DU:
-            du_total += d.consumption()
-        return (self.consumption_rate * self.total_time) + du_total
+            total += d.consumption()
+        for l in LC:
+            total += l.consumption()
+        return (self.consumption_rate * self.total_time) + total
 
     def put(self, pkt, down=False, up=False):
         if(down):
-            for t in self.targets:
-                yield self.env.timeout(self.delay_down)
-                t.put(pkt, down=True)
+            yield self.env.timeout(self.delay_down)
+            target.put(pkt, down=True)
         if(up):
             if(enabled):
-                du = None
-                for d in DU:
-                    if(o.freq == DU.freq):
-                        du = d
-                if(d == None and len(DU) > 0): # não tem lc ligado a uma du com tal frequencia
-                    du = DU[0]
-                yield self.env.process(du.execute_functions(o))
+                target_lc = None
+                for l in LC:
+                    if(pkt.freq == l.freq):
+                        target_lc = l
+                        break
+                target_lc.put(pkt)
             else: # desativado
                 self.send_up(pkt, up=True)
 
@@ -308,16 +295,25 @@ class Processing_Node(Active_Node):
         for t in self.targets:
             t.put(o, down=True)
 
-    def run(self):
-        while True:
-            if(self.enabled):
+class LineCard(Active_Node):
+    def __init__(self, env, delay, freq, out=None, enabled=True, consumption=0):
+        self.env = env
+        self.delay = delay
+        self.freq = freq
+        self.out = out
+        Active_Node.__init__(self, env, enabled, consumption, self.env.now)
+
+    def put(self, p):
+        if(self.out != None and self.enable == True):
+            yield self.env.timeout(delay)
+            self.out.execute_functions(p)
 
 class ONU(Active_Node):
     def __init__(self, env, id, target, consumption, cellsite, bitRate, rrhs, enabled=True, freq=-1, distance=0, total_distance=0, threshold=0):
         self.env            = env
         self.id             = id
         self.freq           = freq
-        self.consumption    = consumption # power consumption :: double
+        self.consumption    = consumption # power consumption
         self.target         = target
         self.cellsite       = cellsite # id cellsite
         self.delay_up       = distance / float(Light_Speed)
@@ -330,7 +326,7 @@ class ONU(Active_Node):
         self.total_distance = total_distance
         self.threshold      = threshold
         Active_Node.__init__(self, env, enabled, consumption, self.env.now)
-        self.action = env.process(self.run()) # loop
+        self.action         = env.process(self.run()) # loop
 
     # receiving new packets
     def put(self, pkt, down=False, up=False):
@@ -361,15 +357,16 @@ class ONU(Active_Node):
 
     # upstreaming
     def send_up(self, s):
+        yield self.env.timeout(s.size / (self.bitRate * 8))
         yield self.env.timeout(self.delay_up)
-        yield self.env.process(self.target.put(s, up=True))
+        self.target.put(s, up=True)
 
     # downstreaming
     def send_down(self, r):
         if(type(r) is Grant): # grant
             for g in r:
                 self.grants.append(g)
-        else: # caso em que chegou um pacote
+        else: # caso em que chegou um Packet
             pass
 
     def run(self):
@@ -377,7 +374,7 @@ class ONU(Active_Node):
             if(self.enabled):
                 if(len(self.requests) > 0): # envia requests
                     send_up(self.requests.pop())
-                if(len(self.grants) > 0): # envia pacotes
+                if(len(self.grants) > 0): # envia Packets
                     for g in self.grants:
                         if(g.init_time == self.env.now):
                             p = self.hold[0]
@@ -385,9 +382,10 @@ class ONU(Active_Node):
                             g.size -= p.size
                             if(g.size >= 0):
                                 yield self.env.process(self.send_up(p))
-                            if(g.size <= 0)
+                            if(g.size <= 0):
                                 self.grants.remove(g)
                             break
+            yield self.env.timeout(foo_delay)
 
 # ainda falta fazer
 class Digital_Unit(Active_Node): # execute_functions
