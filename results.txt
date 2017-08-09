@@ -1,0 +1,127 @@
+Testes começam:
+
+	1 - Teste somente Antenna
+Antenna - id: 0 picked Packet - id: 0, init_time: 0.4721269185279483 at 0.4721269185279483
+Antenna - id: 0 picked Packet - id: 1, init_time: 0.7040613261502316 at 0.7040613261502316
+Antenna - id: 0 picked Packet - id: 2, init_time: 0.9950838950440279 at 0.9950838950440279
+Antenna - id: 0 picked Packet - id: 3, init_time: 1.4651532795842628 at 1.4651532795842628
+Antenna - id: 0 picked Packet - id: 4, init_time: 1.5254276677636598 at 1.5254276677636598
+Antenna - id: 0 picked Packet - id: 5, init_time: 1.7274973856254552 at 1.7274973856254552
+Antenna - id: 0 picked Packet - id: 6, init_time: 2.198258768748055 at 2.198258768748055
+Antenna - id: 0 picked Packet - id: 7, init_time: 2.609707585058866 at 2.609707585058866
+Antenna - id: 0 picked Packet - id: 8, init_time: 2.779974050561223 at 2.779974050561223
+Antenna - id: 0 picked Packet - id: 9, init_time: 2.817190163791476 at 2.817190163791476
+Antenna - id: 0 picked Packet - id: 10, init_time: 2.92333367196843 at 2.92333367196843
+Antenna - id: 0 picked Packet - id: 11, init_time: 3.94130486244411 at 3.94130486244411
+Antenna - id: 0 picked Packet - id: 12, init_time: 3.9632000042781326 at 3.9632000042781326
+Antenna - id: 0 picked Packet - id: 13, init_time: 4.040179469055342 at 4.040179469055342
+Antenna - id: 0 picked Packet - id: 14, init_time: 4.639582416789342 at 4.639582416789342
+Antenna - id: 0 picked Packet - id: 15, init_time: 4.7590320286001315 at 4.7590320286001315
+Antenna - id: 0 picked Packet - id: 16, init_time: 4.805935664954209 at 4.805935664954209
+Antenna - id: 0 picked Packet - id: 17, init_time: 4.882259634632677 at 4.882259634632677
+
+	2 - Teste Antenna ligada a Splitter ligado a Splitter (2 Splitters)
+Antenna - id: 0 picked Packet - id: 0, init_time: 0.08176479168765129 at 0.08176479168765129
+Antenna - id: 0 delivering Packet - id: 0, init_time: 0.08176479168765129 to Splitter - (n/a) at 0.08176479168765129
+Antenna - id: 0 delivered at 4.086526696449556
+Splitter - (n/a) receveid pkt Packet - id: 0, init_time: 0.08176479168765129 at 4.086526696449556
+Antenna - id: 0 picked Packet - id: 1, init_time: 0.19336851700605212 at 4.086626696449556
+Antenna - id: 0 delivering Packet - id: 1, init_time: 0.19336851700605212 to Splitter - (n/a) at 4.086626696449556
+Splitter - (n/a) finished sending pkt Packet - id: 0, init_time: 0.08176479168765129 at 4.088907648830508
+Splitter - (n/a) receveid pkt Packet - id: 0, init_time: 0.08176479168765129 at 4.088907648830508
+
+	3 - Teste Antenna ligada a Splitter ligado a ONU ligada a um Splitter (2 Splitters)
+Antenna - id: 0 picked Packet - id: 0, init_time: 0.1736723251256514 at 0.1736723251256514
+Antenna - id: 0 delivering Packet - id: 0, init_time: 0.1736723251256514 to Splitter - (n/a) at 0.1736723251256514
+Antenna - id: 0 delivered at 4.178434229887556
+Splitter - (n/a) receveid pkt Packet - id: 0, init_time: 0.1736723251256514 at 4.178434229887556
+Antenna - id: 0 picked Packet - id: 1, init_time: 0.2583283893630992 at 4.178534229887556
+Antenna - id: 0 delivering Packet - id: 1, init_time: 0.2583283893630992 to Splitter - (n/a) at 4.178534229887556
+Splitter - (n/a) finished sending pkt Packet - id: 0, init_time: 0.1736723251256514 at 4.180815182268509
+ONU - id: 0 receveid pkt Packet - id: 0, init_time: 0.1736723251256514 at 4.180815182268509
+ONU - id: 0 is generating a request at 4.180815182268509
+ONU - id: 0 is sending a request at 4.180900000003595
+ONU - id: 0 finished sending (upstream) pkt at 4.1856619047654995
+Splitter - (n/a) receveid pkt Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 at 4.1856619047654995
+
+	4 - Teste Antenna ligada a ONU ligada a Processing_Node ligado a Splitter
+Antenna - id: 0 picked Packet - id: 0, init_time: 0.07162346877898781 at 0.07162346877898781
+Antenna - id: 0 delivering Packet - id: 0, init_time: 0.07162346877898781 to ONU - id: 0 at 0.07162346877898781
+Antenna - id: 0 delivered at 1.6763853735408927
+ONU - id: 0 receveid pkt Packet - id: 0, init_time: 0.07162346877898781 at 1.6763853735408927
+ONU - id: 0 is generating a request at 1.6763853735408927
+ONU - id: 0 is sending a request at 1.6763999999998318
+Antenna - id: 0 picked Packet - id: 1, init_time: 0.0807901187577669 at 1.6764853735408927
+Antenna - id: 0 delivering Packet - id: 1, init_time: 0.0807901187577669 to ONU - id: 0 at 1.6764853735408927
+ONU - id: 0 finished sending (upstream) pkt at 1.6811619047617365
+Processing Node - id: 0 receveid pkt Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 at 1.6811619047617365
+Processing Node - id: 0 is sending Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 to LCs at 1.6811999999998313
+Antenna - id: 0 delivered at 3.2812472783027973
+ONU - id: 0 receveid pkt Packet - id: 1, init_time: 0.0807901187577669 at 3.2812472783027973
+ONU - id: 0 is generating a request at 3.2812472783027973
+ONU - id: 0 is sending a request at 3.2813000000025
+Antenna - id: 0 picked Packet - id: 2, init_time: 0.08639405779785853 at 3.2813472783027975
+Antenna - id: 0 delivering Packet - id: 2, init_time: 0.08639405779785853 to ONU - id: 0 at 3.2813472783027975
+ONU - id: 0 finished sending (upstream) pkt at 3.286061904764405
+Processing Node - id: 0 receveid pkt Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 at 3.286061904764405
+Processing Node - id: 0 is sending Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 to LCs at 3.2861000000025102
+Antenna - id: 0 delivered at 4.886109183064702
+ONU - id: 0 receveid pkt Packet - id: 2, init_time: 0.08639405779785853 at 4.886109183064702
+ONU - id: 0 is generating a request at 4.886109183064702
+ONU - id: 0 is sending a request at 4.886200000001951
+Antenna - id: 0 picked Packet - id: 3, init_time: 0.1360930116145723 at 4.886209183064702
+Antenna - id: 0 delivering Packet - id: 3, init_time: 0.1360930116145723 to ONU - id: 0 at 4.886209183064702
+ONU - id: 0 finished sending (upstream) pkt at 4.890961904763856
+Processing Node - id: 0 receveid pkt Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 at 4.890961904763856
+Processing Node - id: 0 is sending Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 to LCs at 4.89100000000194
+
+	5 - Teste 4 so que com VM Teste instanciado em uma DU no Node
+Antenna - id: 0 picked Packet - id: 0, init_time: 0.1008039338506052 at 0.1008039338506052
+Antenna - id: 0 delivering Packet - id: 0, init_time: 0.1008039338506052 to ONU - id: 0 at 0.1008039338506052
+Antenna - id: 0 delivered at 1.70556583861251
+ONU - id: 0 receveid pkt Packet - id: 0, init_time: 0.1008039338506052 at 1.70556583861251
+ONU - id: 0 is generating a request at 1.70556583861251
+ONU - id: 0 is sending a request at 1.7055999999998286
+Antenna - id: 0 picked Packet - id: 1, init_time: 0.46360907084250386 at 1.70566583861251
+Antenna - id: 0 delivering Packet - id: 1, init_time: 0.46360907084250386 to ONU - id: 0 at 1.70566583861251
+ONU - id: 0 finished sending (upstream) pkt at 1.7103619047617333
+Processing Node - id: 0 receveid pkt Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 at 1.7103619047617333
+Processing Node - id: 0 is sending Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 to LCs at 1.710399999999828
+LineCard - freq: -1 is pushing Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 to a DU at 1.710399999999828
+Digital Unit - (n/a) will execute functions at 1.710399999999828
+Digital Unit - (n/a) is using VM Foo VM - (n/a) on Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 at 1.710399999999828
+Foo VM - (n/a) received Request - id: 0, id_sender: 0, freq: -1, bandwidth: 50 at 1.710399999999828
+Foo VM - (n/a) completed its function; returning object at 1.710499999999828
+Digital Unit - (n/a) is sending the left data to Processing Node - id: 0 at 1.710499999999828
+Antenna - id: 0 delivered at 3.310427743374415
+ONU - id: 0 receveid pkt Packet - id: 1, init_time: 0.46360907084250386 at 3.310427743374415
+ONU - id: 0 is generating a request at 3.310427743374415
+ONU - id: 0 is sending a request at 3.3105000000025617
+Antenna - id: 0 picked Packet - id: 2, init_time: 0.5878816482291361 at 3.3105277433744154
+Antenna - id: 0 delivering Packet - id: 2, init_time: 0.5878816482291361 to ONU - id: 0 at 3.3105277433744154
+ONU - id: 0 finished sending (upstream) pkt at 3.3152619047644665
+Processing Node - id: 0 receveid pkt Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 at 3.3152619047644665
+Processing Node - id: 0 is sending Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 to LCs at 3.315300000002572
+LineCard - freq: -1 is pushing Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 to a DU at 3.315300000002572
+Digital Unit - (n/a) will execute functions at 3.315300000002572
+Digital Unit - (n/a) is using VM Foo VM - (n/a) on Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 at 3.315300000002572
+Foo VM - (n/a) received Request - id: 1, id_sender: 0, freq: -1, bandwidth: 100 at 3.315300000002572
+Foo VM - (n/a) completed its function; returning object at 3.315400000002572
+Digital Unit - (n/a) is sending the left data to Processing Node - id: 0 at 3.315400000002572
+Antenna - id: 0 delivered at 4.91528964813632
+ONU - id: 0 receveid pkt Packet - id: 2, init_time: 0.5878816482291361 at 4.91528964813632
+ONU - id: 0 is generating a request at 4.91528964813632
+ONU - id: 0 is sending a request at 4.915300000001883
+Antenna - id: 0 picked Packet - id: 3, init_time: 0.608914515814667 at 4.91538964813632
+Antenna - id: 0 delivering Packet - id: 3, init_time: 0.608914515814667 to ONU - id: 0 at 4.91538964813632
+ONU - id: 0 finished sending (upstream) pkt at 4.920061904763788
+Processing Node - id: 0 receveid pkt Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 at 4.920061904763788
+Processing Node - id: 0 is sending Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 to LCs at 4.920100000001872
+LineCard - freq: -1 is pushing Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 to a DU at 4.920100000001872
+Digital Unit - (n/a) will execute functions at 4.920100000001872
+Digital Unit - (n/a) is using VM Foo VM - (n/a) on Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 at 4.920100000001872
+Foo VM - (n/a) received Request - id: 2, id_sender: 0, freq: -1, bandwidth: 150 at 4.920100000001872
+Foo VM - (n/a) completed its function; returning object at 4.920200000001872
+Digital Unit - (n/a) is sending the left data to Processing Node - id: 0 at 4.920200000001872
+
+finished test!
