@@ -1,0 +1,13 @@
+tests_todo:
+	testar consumption
+	testar DBA:
+		- limite de banda
+		- colisao
+		- 
+	testar passagem de dados: nao so packets, requests, grants (problema com listas)
+
+aprimorar:
+	geracao de graficos
+	alterar consumption para nao ser linear
+
+o que eh ILP?
