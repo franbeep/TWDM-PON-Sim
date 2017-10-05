@@ -30,12 +30,6 @@ for f in range(1,max_onus):
 
     nodes = sim.create_topology(env, antenas, onus, pns, splts, matrix, max_frequencies,onu_consumption=15, pn_consumption=20, lc_consumption=5)
 
-    # add a Digital Unit with DBA
-    nodes[2*f].append_DU(20, nodes[2*f], -1, enabled=True, vms=[sim.DBA_Assigner(env, nodes[2*f], 0, 125000, max_frequencies-3)])
-
-    # add a Digital Unit to BB processing
-    nodes[2*f].append_DU(20, nodes[2*f], 0, enabled=True, vms=[sim.Foo_BB_VM(env)])
-
     # start
     print("\nBegin.\n")
     env.run(until=5)

@@ -3,13 +3,43 @@ import functools
 import random
 import time
 
-traffic_gen_default_size = 50
-Light_Speed         = 300000000 # light speed
-Antenna_Speed       = 300000000 # arbitrary
-foo_delay           = 0.0001 # arbitrary
-DBA_IPACT_default_bandwidth = 1250000 # 1.25 Gb/s, bandwidth for each frequency/vpon
+# Default attributes
 
-# statistics
+# default traffic generator size:
+tg_default_size = lambda x: 50
+# default traffic generator distribution:
+tg_default_dist = lambda x: random.expovariate(10)
+# default DBA bandwidth:
+DBA_IPACT_default_bandwidth = 1250000 # 1.25 Gb/s, bandwidth for each frequency/vpon
+# default ONU consumption:
+ONU_consumption = lambda x: 0
+# default Processing Node consumption:
+PN_consumption = lambda x: 0
+# default LineCard consumption:
+LC_consumption = lambda x: 0
+# default Digital Unit consumption:
+DU_consumption = lambda x: 0
+# default ONU threshold:
+ONU_threshold = 0
+# default ONU bit rate downstreaming:
+ONU_bitRate_down = 0
+# default ONU bit rate upstreaming:
+ONU_bitRate_up = 0
+# default Processing Node downstreaming:
+PN_bitRate_down = 0
+# default Processing Node upstreaming:
+PN_bitRate_up = 0
+
+# Constants
+
+# Light Speed:
+Light_Speed = 300000000
+# Radio Speed:
+Antenna_Speed = 300000000
+# interactions delay (to not overload the simulation):
+foo_delay = 0.0001 # arbitrary
+
+# statistics class
 class Writer(object):
     def __init__(self, suffix, start="#\n", date=True):
         filename = ""
@@ -27,9 +57,11 @@ class Writer(object):
     def close(self):
         self.file.close()
 
-packet_w = Writer("packet_", start="# id src init_time waited_time freq processed_time\n")
+# packet_w = Writer("packet_", start="# id src init_time waited_time freq processed_time\n")
+packet_w = None
 
-def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_frequency, onu_consumption=0, pn_consumption=0, onu_threshold=0, onu_bitRate_down=0, onu_bitRate_up=0, pn_bitRate_down=0, pn_bitRate_up=0, lc_consumption=0):
+# topology functions
+def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_frequency):
     id_onu = 0
     id_pn = 0
     id_ant = 0
@@ -43,20 +75,28 @@ def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_fre
 
     for i in range(qnty_onu):
         print("Creating ONU #", id_onu)
-        nodes.append(ONU(env, id_onu, None, None, onu_consumption, None, onu_bitRate_up, onu_bitRate_down, 0, threshold=onu_threshold))
+        nodes.append(ONU(env, id_onu, None, None, ONU_consumption, None, ONU_bitRate_up, ONU_bitRate_down, 0, threshold=ONU_threshold))
         id_onu += 1
 
     for i in range(qnty_pn):
         print("Creating Processing Node #", id_pn)
         # create lcs and put them to sleep
         pn_lcs = []
-        pn_lcs.append(LineCard(env, -1, consumption=lc_consumption)) # control's LC; perhaps with 0 consumption and enabled
+        pn_lcs.append(LineCard(env, -1, consumption=LC_consumption)) # control's LC; perhaps with 0 consumption and enabled
         for j in range(max_frequency):
-            pn_lcs.append(LineCard(env, j, consumption=lc_consumption))
+            pn_lcs.append(LineCard(env, j, consumption=LC_consumption))
         # create DUs
         pn_dus = []
         # attach LCs and DUs
-        pn_node = Processing_Node(env, id_pn, None, None, pn_consumption, pn_bitRate_up, pn_bitRate_down, 0, LC=pn_lcs, DU=pn_dus)
+        pn_node = Processing_Node(env, id_pn, None, None, PN_consumption, PN_bitRate_up, PN_bitRate_down, 0, LC=pn_lcs, DU=pn_dus)
+
+        # add a Digital Unit with DBA
+        # def __init__(self, env, node, consumption_rate, min_band, max_frequency, enabled=True, delay=0):
+        pn_node.append_DU(DU_consumption, pn_node, -1, enabled=True, vms=[DBA_Assigner(env, pn_node, 0, max_frequency)])
+
+        # add a Digital Unit to BB processing (not real BB processing)
+        pn_node.append_DU(DU_consumption, pn_node, 0, enabled=True, vms=[Foo_BB_VM(env)])
+
         nodes.append(pn_node)
         id_pn += 1
 
@@ -65,6 +105,7 @@ def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_fre
         nodes.append(Splitter(env, 0, None, None, 0))
 
     print("Total nodes:", len(nodes))
+
     # connect nodes
     for m in matrix:
         n_one = nodes[m[0]]
@@ -80,6 +121,24 @@ def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_fre
             n_one.delay = dist / float(Antenna_Speed)
         else:
             n_one.delay_up = dist / float(Light_Speed)
+
+    def set_local_nodes(node):
+        if(isinstance(node, Splitter)):
+            arr = []
+            for t in node.target_down:
+                arr += set_local_nodes(t)
+            return arr
+        elif(isinstance(node, Processing_Node)):
+            print(str(node), "is a local node")
+            return [node]
+        else:
+            return []
+
+    # set local nodes
+    for n in nodes:
+        if(isinstance(n, Processing_Node)):
+            print("Setting local nodes to", str(n), "...")
+            n.local_nodes = set_local_nodes(n.target_down)
 
     return nodes
 
@@ -107,30 +166,24 @@ def create_topology_from_nodes(env, matrix, nodes):
                     print("Removing DBA IPACT from a DU")
                     n.DU.remove(n.DU[i])
                     i = i - 1
-            pass
 
     return nodes
 
-def constant_dist(c):
-    return c
-
-trafgen_def_dist = functools.partial(random.expovariate, 10) # distribution of traffic
-trafgen_def_const = functools.partial(constant_dist) # constant distribution of traffic
-
 # abstract class
 class Traffic_Generator(object):
-    def __init__(self, env, id, distribution, hold=None):
+    def __init__(self, env, id, distribution, size, hold=None):
         self.env              = env
         self.id               = id
-        self.dist             = distribution
+        self.dist             = distribution # callable
+        self.size             = size # callable
         self.hold             = hold # armazena os Packets
         self.trafic_action    = env.process(self.trafic_run())
         self.packets_sent     = 0
 
     def trafic_run(self):
         while True:
-            yield self.env.timeout(self.dist()) # tempo de espera
-            p = Packet(self.packets_sent, traffic_gen_default_size, self.id, -1, self.env.now)
+            yield self.env.timeout(self.dist(self)) # tempo de espera
+            p = Packet(self.packets_sent, self.size(self), self.id, -1, self.env.now)
             while(self.hold == None): # se tiver desativado
                 yield self.env.timeout(foo_delay)
             self.hold.put(p) # adiciona a array que contem os Packets gerados
@@ -163,14 +216,14 @@ class Active_Node(object):
         self.enabled = False
         for o in self.objs:
             if(o.enabled is True):
-                self.obj_sleeping.append(b)
-                b.end()
+                self.obj_sleeping.append(o)
+                o.end()
 
     def consumption(self):
         total = 0
         for o in self.objs:
             total += o.consumption
-        return total + self.consumption_rate * (self.total_time + self.elapsed_time)
+        return total + self.consumption_rate(self) * (self.total_time + self.elapsed_time)
 
     def an_run(self):
         while(True):
@@ -178,7 +231,7 @@ class Active_Node(object):
                 self.elapsed_time = self.env.now - self.start_time
             yield self.env.timeout(foo_delay) # necessario para nao entrar em loop infinito
 
-#
+# unused
 class RRH(Active_Node):
     def __init__(self, env, id, consumption_rate, antennas, enabled=True):
         self.env = env
@@ -190,7 +243,7 @@ class RRH(Active_Node):
         return "RRH - id: {}".\
             format(self.id)
 
-#
+# unused
 class Cellsite(object):
     def __init__(self, env, id, rrh, users, consumption, onus):
         self.env            = env # environment do SimPy
@@ -211,9 +264,9 @@ class Cellsite(object):
         return "Cellsite - id: {}, id_sender: {}, freq: {}, bandwidth: {}".\
             format(self.id, self.id_sender, self.freq, self.bandwidth)
 
-#
+# traffic gen implemented
 class Antenna(Traffic_Generator, Active_Node):
-    def __init__(self, env, id, target_up, consumption_rate, bitRate, distance, enabled=True, rate_dist=trafgen_def_dist):
+    def __init__(self, env, id, target_up, consumption_rate, bitRate, distance, enabled=True):
         self.env            = env # environment
         self.id             = id # id da antena
         self.bitRate        = bitRate # taxa de transmissao
@@ -221,7 +274,7 @@ class Antenna(Traffic_Generator, Active_Node):
         self.store          = simpy.Store(self.env)
         self.delay          = distance / float(Antenna_Speed) # delay upstream
         self.consumption_rate = consumption_rate
-        Traffic_Generator.__init__(self, self.env, self.id, rate_dist, self.store)
+        Traffic_Generator.__init__(self, self.env, self.id, tg_default_dist, tg_default_size, hold=self.store)
         Active_Node.__init__(self, self.env, enabled, self.consumption_rate, [], self.env.now)
         self.action         = env.process(self.run()) # main loop
 
@@ -266,8 +319,8 @@ class Packet(object):
         self.freq = freq
 
     def __repr__(self): # forma compacta
-        return "Packet - id: {}, init_time: {}".\
-            format(self.id, self.init_time)
+        return "Packet - id: {}, src: {}, init_time: {}".\
+            format(self.id, self.src, self.init_time)
 
 # abstract class
 class Virtual_Machine(object):
@@ -294,12 +347,13 @@ class Foo_BB_VM(Virtual_Machine):
         self.env = env
 
     def func(self, o):
-        if(type(o) is Packet):
-            packet_w.write("{} {} {} {} {} {}\n".format(o.id, o.src, o.init_time, o.waited_time, o.freq, self.env.now))
-        if(type(o) is list and type(o[0]) is Packet):
-            for p in o:
-                packet_w.write("{} {} {} {} {} {}\n".format(p.id, p.src, p.init_time, p.waited_time, p.freq, self.env.now))
-        yield self.env.timeout(0)
+        if(packet_w != None):
+            if(type(o) is Packet):
+                packet_w.write("{} {} {} {} {} {}\n".format(o.id, o.src, o.init_time, o.waited_time, o.freq, self.env.now))
+            if(type(o) is list and type(o[0]) is Packet):
+                for p in o:
+                    packet_w.write("{} {} {} {} {} {}\n".format(p.id, p.src, p.init_time, p.waited_time, p.freq, self.env.now))
+            yield self.env.timeout(0)
         return None
 
     def __repr__(self):
@@ -336,15 +390,14 @@ class Splitter(object):
         self.id             = id
         self.target_up      = target_up # alvo em upstreaming
         self.target_down    = target_down # alvos em downstreaming
-        if(self.target_down != None):
-            sorted(self.target_down, key=lambda target: target.delay_up) # organiza pelo tempo de upstreaming dos peers
-        else:
-            self.target_down = []
+        self.target_down = []
         self.delay_up       = distance_up / float(Light_Speed) # tempo para transmitir upstream
 
     def put(self, pkt, down=False, up=False):
         print(str(self), "receveid pkt", str(pkt), "at", self.env.now)
         if(down and len(self.target_down) > 0):
+            if(self.target_down != None):
+                self.target_down.sort(key=lambda target: target.delay_up) # organiza pelo tempo de upstreaming dos peers
             counted = 0
             for t in self.target_down:
                 yield self.env.timeout(t.delay_up - counted)
@@ -703,7 +756,7 @@ class ONU(Active_Node):
         data_to_transfer = []
         if(self.ack < grant.ack):
             self.ack = grant.ack
-        to_wait = grant.init_time - self.env.
+        to_wait = grant.init_time - self.env.now
         if(to_wait < 0):
         	print(str(self), "is going to discard grant, reason: negative wait time; at", self.env.now)
         print(str(self), "is going to wait", str(to_wait), "at", self.env.now)
@@ -765,11 +818,14 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
         self.bandwidth = bandwidth
 
         self.busy = simpy.Resource(self.env, capacity=1)
-        self.onus = [] # connected onus
+        self.onus = [] # "connected" onus
         self.acks = {}
-        self.bandwidth_used = {}
+        self.bandwidth_used = 0
+        self.removable_bandwidth = []
         self.free_time = self.env.now
         Active_Node.__init__(self, env, enabled, consumption_rate, [], self.env.now)
+
+        self.action = self.env.process(self.run())
 
     # override function
     def end(self):
@@ -778,37 +834,14 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
         self.enabled = False
         self.onus = []
         self.acks = {}
-        self.bandwidth_used = {}
-
-    def is_there_bandwidth(self, r, time):
-        # is there bandwidth available?
-        # look if last second it used total bandwidth per onu
-        arr = self.bandwidth_used[r.id_sender]
-        print("arr:", str(arr))
-        if(len(arr) > 0):
-            start = True
-            accumulator_size = 0
-
-            index = -1
-            for i in reversed(range(len(arr))):
-                if(arr[i][1] + 1 < self.env.now): # too old requests
-                    self.bandwidth_used[r.id_sender] = arr[i:]
-                    break
-            for a in arr:
-                accumulator_size += a[0]
-            
-            if((accumulator_size + r.bandwidth) < self.bandwidth / len(self.onus)):
-                return True
-            else:
-                return False
-        else:
-            return True
 
     def associate_onu(self, r):
         self.onus.append(r.id_sender)
         self.acks[r.id_sender] = r.ack
-        self.bandwidth_used[r.id_sender] = []
 
+    def desassociate_onu(self, onu):
+        self.onus.remove(onu)
+        del self.acks[onu]
 
     def func(self, r):
         with self.busy.request() as req: # semaphore
@@ -819,40 +852,65 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                 if(r.ack != self.acks[r.id_sender]): # not aligned acks!
                     print(str(self), "received duplicated request at", str(self.env.now))
                     return None
+                # aligned acks
                 time_to = self.node.time_to_onu(0, r.id_sender)
                 time_from = self.node.time_from_onu(r.bandwidth, r.id_sender)
-                if(self.is_there_bandwidth(r, time_from)):
-                    # generate grant
-                    self.acks[r.id_sender] += 1
-                    if(self.free_time < self.env.now):
-                        # first case
+
+                if(self.bandwidth_used + r.bandwidth <= self.bandwidth):
+                    # there is bandwidth!!
+                    g = None
+                    if(self.env.now + time_to > self.free_time):
                         g = Grant(r.id_sender, self.env.now + time_to + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
                         print(str(self), "generated", str(g), "at", self.env.now)
-                        self.free_time = self.env.now + time_to + time_from + foo_delay # rever! time1 e time2 diferentes pois request != packet normal
-                        self.bandwidth_used[r.id_sender].append([r.bandwidth, self.free_time]) # to calculate bandwidth allocated
-                        yield self.env.process(self.node.send_down(g))
-                        return None # return none
+                        self.free_time = self.env.now + time_to + foo_delay + time_from
                     else:
-                        # normal case
-                        if(self.env.now + time_to > self.free_time):
-                            g = Grant(r.id_sender, self.env.now + time_to + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
-                            print(str(self), "generated", str(g), "at", self.env.now)
-                            self.free_time = self.env.now + time_to + foo_delay + time_from
-                        else:
-                            g = Grant(r.id_sender, self.free_time + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
-                            print(str(self), "generated", str(g), "at", self.env.now)
-                            self.free_time = self.free_time + foo_delay + time_from
-                        self.bandwidth_used[r.id_sender].append([r.bandwidth, self.free_time]) # to calculate bandwidth allocated
-                        yield self.env.process(self.node.send_down(g))
-                        return None # return none
+                        g = Grant(r.id_sender, self.free_time + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
+                        print(str(self), "generated", str(g), "at", self.env.now)
+                        self.free_time = self.free_time + foo_delay + time_from
+
+                    yield self.env.process(self.node.send_down(g))
+                    self.bandwidth_used += r.bandwidth
+                    # case there was more than 1 request in short time
+                    removable = None
+                    for f in self.removable_bandwidth:
+                        if(f[2] == r.id_sender):
+                            print(str(self), "Found duplicated id_sender on removable bandwidth, removing at", self.env.now)
+                            removable = f
+                            self.removable_bandwidth.remove(f)
+                            break
+                    # self.removable_bandwidth += [(self.free_time, r.bandwidth, r.id_sender)]
+                    self.removable_bandwidth += [(self.env.now + 1 - foo_delay, r.bandwidth, r.id_sender)] # rodrigo!
+                    print("Bandwidth available:", self.bandwidth - self.bandwidth_used, "at", self.env.now)
+                    yield self.env.timeout(self.delay)
+                    return None # return none
+
                 else:
-                    # there is not bandwidth
-                    print("Passing", str(r), "because no bandwidth at", str(self.env.now))
-                    pass # provisory
+                    # no bandwidth
+                    print(str(self), "has no bandwidth at", self.env.now)
+                    if(len(self.node.local_nodes) > 0):
+                        # activate more-local PN
+                        print(str(self), "is activating a more local node at", self.env.now)
+                        node = self.node.local_nodes.pop()
+                        node.start()
+                    else:
+                        # no more local nodes!
+                        pass
             else:
                 # pass along to another dba
-                print("Passing", str(r), "at", str(self.env.now))
+                print(str(self),"is passing along object", str(r), "at", str(self.env.now))
                 return r
+
+    def run(self):
+        while(True):
+            if(self.enabled and len(self.removable_bandwidth) > 0):
+                z = self.removable_bandwidth.pop(0)
+                if(z[0] > self.env.now):
+                    yield self.env.timeout(z[0] - self.env.now)
+                print("Removing ONU", z[2], "from DBA", str(self), "duo expired time at", self.env.now)
+                self.bandwidth_used -= z[1]
+                self.desassociate_onu(z[2])
+                print("Bandwidth available:", self.bandwidth - self.bandwidth_used, "at", self.env.now)
+            yield self.env.timeout(foo_delay)
 
     def __repr__(self):
         return "DBA IPACT - freq: {}, free_time: {}".\
@@ -860,10 +918,9 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
 
 # assign VPON/DBA to requests
 class DBA_Assigner(Active_Node, Virtual_Machine):
-    def __init__(self, env, node, consumption_rate, min_band, max_frequency, enabled=True, delay=0):
+    def __init__(self, env, node, consumption_rate, max_frequency, enabled=True, delay=0):
         self.env = env
         self.node = node
-        self.min_band = min_band
         self.max_frequency = max_frequency
         self.delay = delay
 
@@ -882,7 +939,7 @@ class DBA_Assigner(Active_Node, Virtual_Machine):
                 if(o.id_sender in d.onus): # found!
                     print(str(self) + ": this ONU has already a DBA")
                     return o
-                if(target_dba == None and d.bandwidth / (len(d.onus) + 1) > self.min_band):
+                if(target_dba == None and d.bandwidth - d.bandwidth_used + o.bandwidth >= 0):
                     target_dba = d
             # not fonud! create/assign new VPON/DBA
             print(str(self) + ": this ONU hasn't a DBA")
