@@ -11,6 +11,8 @@ tg_default_size = lambda x: 50
 tg_default_dist = lambda x: random.expovariate(10)
 # default DBA bandwidth:
 DBA_IPACT_default_bandwidth = 1250000 # 1.25 Gb/s, bandwidth for each frequency/vpon
+# default Antenna consumption:
+Ant_consumption = lambda x: 0
 # default ONU consumption:
 ONU_consumption = lambda x: 0
 # default Processing Node consumption:
@@ -37,7 +39,7 @@ Light_Speed = 300000000
 # Radio Speed:
 Antenna_Speed = 300000000
 # interactions delay (to not overload the simulation):
-foo_delay = 0.0001 # arbitrary
+foo_delay = 0.00001 # arbitrary
 
 # statistics class
 class Writer(object):
@@ -70,7 +72,7 @@ def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_fre
     # create nodes
     for i in range(qnty_ant):
         print("Creating Antenna #", id_ant)
-        nodes.append(Antenna(env, id_ant, None, 0, 0, 0))
+        nodes.append(Antenna(env, id_ant, None, Ant_consumption, 0, 0))
         id_ant += 1
 
     for i in range(qnty_onu):
@@ -82,9 +84,9 @@ def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_fre
         print("Creating Processing Node #", id_pn)
         # create lcs and put them to sleep
         pn_lcs = []
-        pn_lcs.append(LineCard(env, -1, consumption=LC_consumption)) # control's LC; perhaps with 0 consumption and enabled
+        pn_lcs.append(LineCard(env, -1)) # control's LC; perhaps with 0 consumption and enabled
         for j in range(max_frequency):
-            pn_lcs.append(LineCard(env, j, consumption=LC_consumption))
+            pn_lcs.append(LineCard(env, j))
         # create DUs
         pn_dus = []
         # attach LCs and DUs
@@ -222,7 +224,7 @@ class Active_Node(object):
     def consumption(self):
         total = 0
         for o in self.objs:
-            total += o.consumption
+            total += o.consumption()
         return total + self.consumption_rate(self) * (self.total_time + self.elapsed_time)
 
     def an_run(self):
@@ -231,38 +233,38 @@ class Active_Node(object):
                 self.elapsed_time = self.env.now - self.start_time
             yield self.env.timeout(foo_delay) # necessario para nao entrar em loop infinito
 
-# unused
-class RRH(Active_Node):
-    def __init__(self, env, id, consumption_rate, antennas, enabled=True):
-        self.env = env
-        self.id = id
-        self.antennas = antennas
-        Active_Node.__init__(self, env, enabled, consumption_rate, antennas,self.env.now)
+# # unused
+# class RRH(Active_Node):
+#     def __init__(self, env, id, consumption_rate, antennas, enabled=True):
+#         self.env = env
+#         self.id = id
+#         self.antennas = antennas
+#         Active_Node.__init__(self, env, enabled, consumption_rate, antennas,self.env.now)
 
-    def __repr__(self):
-        return "RRH - id: {}".\
-            format(self.id)
+#     def __repr__(self):
+#         return "RRH - id: {}".\
+#             format(self.id)
 
-# unused
-class Cellsite(object):
-    def __init__(self, env, id, rrh, users, consumption, onus):
-        self.env            = env # environment do SimPy
-        self.id             = id # identificador :: int
-        self.rrh            = rrh # conjunto de RRH(s) :: RRH []
-        self.onus           = onus # conjunto de ONU(s) :: ONU []
-        self.users          = users # usuarios atendidos :: User []
+# # unused
+# class Cellsite(object):
+#     def __init__(self, env, id, rrh, users, consumption, onus):
+#         self.env            = env # environment do SimPy
+#         self.id             = id # identificador :: int
+#         self.rrh            = rrh # conjunto de RRH(s) :: RRH []
+#         self.onus           = onus # conjunto de ONU(s) :: ONU []
+#         self.users          = users # usuarios atendidos :: User []
 
-    def calcTotalConsumption(self):
-        total = 0
-        for r in self.rrh:
-            total += r.consumption()
-        for o in self.onus:
-            total += onus.consumption()
-        return total
+#     def calcTotalConsumption(self):
+#         total = 0
+#         for r in self.rrh:
+#             total += r.consumption()
+#         for o in self.onus:
+#             total += onus.consumption()
+#         return total
 
-    def __repr__(self):
-        return "Cellsite - id: {}, id_sender: {}, freq: {}, bandwidth: {}".\
-            format(self.id, self.id_sender, self.freq, self.bandwidth)
+#     def __repr__(self):
+#         return "Cellsite - id: {}, id_sender: {}, freq: {}, bandwidth: {}".\
+#             format(self.id, self.id_sender, self.freq, self.bandwidth)
 
 # traffic gen implemented
 class Antenna(Traffic_Generator, Active_Node):
@@ -273,9 +275,8 @@ class Antenna(Traffic_Generator, Active_Node):
         self.target_up      = target_up # saida (possivelmente ONU)
         self.store          = simpy.Store(self.env)
         self.delay          = distance / float(Antenna_Speed) # delay upstream
-        self.consumption_rate = consumption_rate
         Traffic_Generator.__init__(self, self.env, self.id, tg_default_dist, tg_default_size, hold=self.store)
-        Active_Node.__init__(self, self.env, enabled, self.consumption_rate, [], self.env.now)
+        Active_Node.__init__(self, self.env, enabled, consumption_rate, [], self.env.now)
         self.action         = env.process(self.run()) # main loop
 
     def start(self):
@@ -394,7 +395,7 @@ class Splitter(object):
         self.delay_up       = distance_up / float(Light_Speed) # tempo para transmitir upstream
 
     def put(self, pkt, down=False, up=False):
-        print(str(self), "receveid pkt", str(pkt), "at", self.env.now)
+        print(str(self), "receveid obj", str(pkt), "at", self.env.now)
         if(down and len(self.target_down) > 0):
             if(self.target_down != None):
                 self.target_down.sort(key=lambda target: target.delay_up) # organiza pelo tempo de upstreaming dos peers
@@ -405,7 +406,7 @@ class Splitter(object):
                 self.env.process(t.put(pkt, down=True))
         if(up and self.target_up != None):
             yield self.env.timeout(self.delay_up)
-            print(str(self), "finished sending pkt", str(pkt), "at", self.env.now)
+            print(str(self), "finished sending obj", str(pkt), "at", self.env.now)
             self.env.process(self.target_up.put(pkt, up=True))
 
     def __repr__(self):
@@ -420,8 +421,8 @@ class Processing_Node(Active_Node):
         self.LC             = LC
         self.bitRate_up     = bitRate_up
         self.bitRate_down   = bitRate_down
-        self.res_hold_up	= simpy.Resource(self.env, capacity=1) # semaforo de dados upstream
-        self.res_hold_down	= simpy.Resource(self.env, capacity=1) # semaforo de dados downstream
+        self.res_hold_up    = simpy.Resource(self.env, capacity=1) # semaforo de dados upstream
+        self.res_hold_down  = simpy.Resource(self.env, capacity=1) # semaforo de dados downstream
         self.hold_up        = [] # array de dados upstream
         self.hold_down      = [] # array de dados downstream
         self.target_up      = target_up # target downstreaming
@@ -492,7 +493,7 @@ class Processing_Node(Active_Node):
             if(self.bitRate_up > 0):
                 yield self.env.timeout(o.size / (self.bitRate_up / 8)) # transmission
             yield self.env.timeout(self.delay_up) # propagation
-            print(str(self), "finished sending (upstream) pkt at", self.env.now)
+            print(str(self), "finished sending (upstream) obj at", self.env.now)
             self.env.process(self.target_up.put(o, up=True))
 
     # downstreaming
@@ -501,7 +502,7 @@ class Processing_Node(Active_Node):
             if(self.bitRate_down > 0):
                 yield self.env.timeout(o.size / (self.bitRate_down / 8)) # transmission
             yield self.env.timeout(self.target_down.delay_up) # propagation
-            print(str(self), "finished sending (downstream) pkt at", self.env.now)
+            print(str(self), "finished sending (downstream) obj at", self.env.now)
             self.env.process(self.target_down.put(o, down=True))
 
     def put(self, pkt, down=False, up=False):
@@ -615,7 +616,7 @@ class Digital_Unit(Active_Node):
 
 # linecard attuned to a frequency
 class LineCard(Active_Node):
-    def __init__(self, env, freq, delay=0, out=None, enabled=False, consumption=0):
+    def __init__(self, env, freq, delay=0, out=None, enabled=False, consumption=LC_consumption):
         self.env = env
         self.delay = delay
         self.freq = freq
@@ -638,7 +639,6 @@ class ONU(Active_Node):
         self.env            = env
         self.id             = id
         self.freq           = freq
-        self.consumption    = consumption # power consumption
         self.target_up      = target_up
         if(target_down == None):
             self.target_down = []
@@ -651,16 +651,18 @@ class ONU(Active_Node):
         self.ack = 0
 
         # semaforos
-        self.res_hold_up	= simpy.Resource(self.env, capacity=1) # semaforo de dados upstream
-        self.res_hold_down	= simpy.Resource(self.env, capacity=1) # semaforo de dados downstream
-        self.res_grants		= simpy.Resource(self.env, capacity=1) # semaforo de grants recebidos
-        self.res_requests	= simpy.Resource(self.env, capacity=1) # semaforo de requests gerados
+        self.res_hold_up    = simpy.Resource(self.env, capacity=1) # semaforo de dados upstream
+        self.res_hold_down  = simpy.Resource(self.env, capacity=1) # semaforo de dados downstream
+        self.res_grants     = simpy.Resource(self.env, capacity=1) # semaforo de grants recebidos
+        self.res_requests   = simpy.Resource(self.env, capacity=1) # semaforo de requests gerados
 
         self.hold_up        = [] # array de dados upstream
         self.hold_down      = [] # array de dados downstream
         self.grants         = [] # array de grants recebidos
         self.requests       = [] # array de requests gerados para serem enviados
+        self.timer          = []
 
+        self.reset_timer    = False
         self.request_counting = 0
         self.bitRate_up     = bitRate_up
         self.bitRate_down   = bitRate_down
@@ -669,26 +671,29 @@ class ONU(Active_Node):
         Active_Node.__init__(self, env, enabled, consumption, [], self.env.now)
         self.action         = env.process(self.run()) # loop
 
+    def round_trip_time(self):
+        total = 0
+        target = self
+        while(not (isinstance(target, Processing_Node) and target.enabled) ):
+            total += target.delay_up
+            target = target.target_up
+        total += target.time_to_onu(0, self.id)
+        print(str(self), "calculated RTT:", total)
+        return total
+
     def end(self):
         self.total_time += self.elapsed_time
         self.elapsed_time = 0
         self.enabled = False
-        with self.res_hold_up.request() as req1:
-            yield req1
-            with self.res_hold_down.request() as req2:
-                yield req2
-                with self.res_grants.request() as req3:
-                    yield req3
-                    with self.res_requests.request() as req4:
-                        yield req4
-                        self.hold_up        = []
-                        self.hold_down      = []
-                        self.grants         = []
-                        self.requests       = []
+        self.hold_up        = []
+        self.hold_down      = []
+        self.grants         = []
+        self.requests       = []
+        self.timer          = []
 
     # receive new data to upstream/downstream it
     def put(self, pkt, down=False, up=False):
-        print(str(self), "receveid pkt", str(pkt), "at", self.env.now)
+        print(str(self), "receveid obj", str(pkt), "at", self.env.now)
         if(self.enabled):
             if(down):
                 # one grant
@@ -722,6 +727,8 @@ class ONU(Active_Node):
         with self.res_requests.request() as req:
             yield req
             self.requests.append(Request(self.request_counting, self.id, -1, self.total_hold_size, self.ack))
+            self.timer.append(self.round_trip_time() * 2) # 2 x RTT
+            self.reset_timer = False
             self.request_counting += 1
 
     # upstreaming
@@ -730,7 +737,7 @@ class ONU(Active_Node):
             if(self.bitRate_up > 0):
                 yield self.env.timeout(o.size / (self.bitRate_up / 8)) # transmission
             yield self.env.timeout(self.delay_up) # propagation
-            print(str(self), "finished sending (upstream) pkt at", self.env.now)
+            print(str(self), "finished sending (upstream) obj at", self.env.now)
             self.env.process(self.target_up.put(o, up=True))
 
     # downstreaming
@@ -745,7 +752,7 @@ class ONU(Active_Node):
                     additional_time = 0
                 yield self.env.timeout(additional_time + t.delay_up - counted) # errado?
                 counted = additional_time + t.delay_up
-                print(str(self), "finished sending (downstream) pkt at", self.env.now)
+                print(str(self), "finished sending (downstream) obj at", self.env.now)
                 self.env.process(t.put(o, down=True))
              # transmission
             yield self.env.timeout(self.target_down.delay_up) # propagation
@@ -753,13 +760,15 @@ class ONU(Active_Node):
 
     # use the grant(s) you received
     def use_grant(self, grant):
-        data_to_transfer = []
         if(self.ack < grant.ack):
             self.ack = grant.ack
         to_wait = grant.init_time - self.env.now
         if(to_wait < 0):
-        	print(str(self), "is going to discard grant, reason: negative wait time; at", self.env.now)
+            # generate a new request
+            print(str(self), "is going to discard grant, reason: negative wait time; at", self.env.now)
+            self.env.process(self.gen_request())
         print(str(self), "is going to wait", str(to_wait), "at", self.env.now)
+        data_to_transfer = []
         with self.res_hold_up.request() as req:
             yield req
             total = 0
@@ -770,6 +779,7 @@ class ONU(Active_Node):
                     break
                 data_to_transfer.append(p)
                 total += p.size
+            self.total_hold_size -= total
         print(str(self), "is going to send (upstream) all data permited through grant at", self.env.now)
         for d in data_to_transfer: # (self, id, size, src, dst, init_time):
             d.src = self.id
@@ -779,7 +789,18 @@ class ONU(Active_Node):
         yield self.env.timeout(to_wait)
         yield self.env.process(self.send_up(data_to_transfer))
 
-    # action
+    # in case grant hasn't come
+    def set_timer(self):
+        to_wait = self.timer.pop(0)
+        yield self.env.timeout(to_wait)
+        if(self.reset_timer):
+            print(str(self), "Discarding timer: Grant received already at", self.env.now)
+            return
+        else:
+            print(str(self), "Resending request... at", self.env.now)
+            self.env.process(self.gen_request())
+
+    # actions
     def run(self):
         while True:
             if(self.enabled):
@@ -790,6 +811,7 @@ class ONU(Active_Node):
                         self.env.process(self.send_up(self.requests.pop(0)))
 
                 if(len(self.grants) > 0 and len(self.hold_up) > 0): # if you got grants
+                    self.reset_timer = True
                     with self.res_grants.request() as req:
                         yield req
                         print(str(self), "is going to use a grant at", self.env.now)
@@ -801,6 +823,12 @@ class ONU(Active_Node):
                         yield req
                         print(str(self), "is going to send (downstream) at", self.env.now)
                         self.env.process(self.send_down(self.hold_down.pop(0)))
+                if(len(self.timer) > 0):
+                    if(self.reset_timer):
+                        self.timer = []
+                        continue
+                    print(str(self), "is setting timer to resend request at", self.env.now)
+                    self.env.process(self.set_timer())
 
             yield self.env.timeout(foo_delay)
 
@@ -860,10 +888,12 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                     # there is bandwidth!!
                     g = None
                     if(self.env.now + time_to > self.free_time):
+                        # first case
                         g = Grant(r.id_sender, self.env.now + time_to + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
                         print(str(self), "generated", str(g), "at", self.env.now)
                         self.free_time = self.env.now + time_to + foo_delay + time_from
                     else:
+                        # normal case
                         g = Grant(r.id_sender, self.free_time + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
                         print(str(self), "generated", str(g), "at", self.env.now)
                         self.free_time = self.free_time + foo_delay + time_from
@@ -879,7 +909,7 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                             self.removable_bandwidth.remove(f)
                             break
                     # self.removable_bandwidth += [(self.free_time, r.bandwidth, r.id_sender)]
-                    self.removable_bandwidth += [(self.env.now + 1 - foo_delay, r.bandwidth, r.id_sender)] # rodrigo!
+                    self.removable_bandwidth += [(self.env.now + tg_default_dist(None) * 0.99, r.bandwidth, r.id_sender)] # rodrigo!
                     print("Bandwidth available:", self.bandwidth - self.bandwidth_used, "at", self.env.now)
                     yield self.env.timeout(self.delay)
                     return None # return none
@@ -904,7 +934,9 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
         while(True):
             if(self.enabled and len(self.removable_bandwidth) > 0):
                 z = self.removable_bandwidth.pop(0)
+                print(str(self), "Scheduled ONU", z[2], "to be removed at", z[0])
                 if(z[0] > self.env.now):
+                    print(str(self), "Going to wait", z[0] - self.env.now)
                     yield self.env.timeout(z[0] - self.env.now)
                 print("Removing ONU", z[2], "from DBA", str(self), "duo expired time at", self.env.now)
                 self.bandwidth_used -= z[1]

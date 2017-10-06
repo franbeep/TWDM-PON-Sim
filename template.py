@@ -12,7 +12,11 @@ env = sim.simpy.Environment()
 # default values
 sim.tg_default_size = lambda x: 5000
 sim.tg_default_dist = lambda x: 1
+sim.ONU_consumption = lambda x: 15
+sim.PN_consumption = lambda x: 25
+sim.Ant_consumption = lambda x: 7
 sim.DBA_IPACT_default_bandwidth = 5000
+
 # constants
 
 # topology
@@ -41,9 +45,19 @@ nodes[5].end() # node 5 starts offline
 nodes[0].end() # antenna 0 starts offline
 nodes[1].end() # antenna 1 starts offline
 
+print(nodes[3], "enabled:", nodes[3].enabled)
+nodes[3].end() # onu 0 starts offline
+print(nodes[3], "enabled:", nodes[3].enabled)
 
 print("Begin.")
 
-env.run(until=5)
+env.run(until=10)
 
 print("End.")
+
+# consumption
+for n in nodes:
+	if(isinstance(n, sim.Splitter)):
+		continue
+	else:
+		print(str(n), "had consumption of:", n.consumption())
