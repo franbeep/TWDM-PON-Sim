@@ -628,6 +628,7 @@ class ONU(Active_Node):
         self.grants = []
         self.requests = []
         self.timer = []
+        self.waiting = False
 
         self.reset_timer = False
         self.request_counting = 0
@@ -665,11 +666,13 @@ class ONU(Active_Node):
             if(down):
                 # one grant
                 if(type(pkt) is Grant and pkt.onu == self.id):
+                    self.reset_timer = True
                     with self.res_grants.request() as req:
                         yield req
                         self.grants.append(pkt)
                 # many grants
                 if(type(pkt) is list and type(pkt[0]) is Grant and pkt[0].onu == self.id_sender):
+                    self.reset_timer = True
                     with self.res_grants.request() as req:
                         yield req
                         for g in pkt:
@@ -694,8 +697,9 @@ class ONU(Active_Node):
         with self.res_requests.request() as req:
             yield req
             self.requests.append(Request(self.request_counting, self.id, -1, self.total_hold_size, self.ack))
-            self.timer.append(self.round_trip_time() * 2) # 2 x RTT
-            self.reset_timer = False
+            if(not self.waiting):
+                self.timer.append(self.round_trip_time() * 2) # 2 x RTT
+                self.reset_timer = False
             self.request_counting += 1
 
     # upstreaming
@@ -783,13 +787,14 @@ class ONU(Active_Node):
     # in case grant hasn't come
     def set_timer(self):
         to_wait = self.timer.pop(0)
+        self.waiting = True
         yield self.env.timeout(to_wait)
         if(self.reset_timer):
             dprint(str(self), "Discarding timer: Grant received already at", self.env.now)
-            return
         else:
             dprint(str(self), "Resending request... at", self.env.now)
             self.env.process(self.gen_request())
+        self.waiting = False
 
     # actions
     def run(self):
@@ -802,7 +807,6 @@ class ONU(Active_Node):
                         self.env.process(self.send_up(self.requests.pop(0)))
 
                 if(len(self.grants) > 0 and len(self.hold_up) > 0): # if you got grants
-                    self.reset_timer = True
                     with self.res_grants.request() as req:
                         yield req
                         dprint(str(self), "is going to use a grant at", self.env.now)
@@ -815,7 +819,7 @@ class ONU(Active_Node):
                         dprint(str(self), "is going to send (downstream) at", self.env.now)
                         self.env.process(self.send_down(self.hold_down.pop(0)))
 
-                if(len(self.timer) > 0): # 
+                if(len(self.timer) > 0):
                     if(self.reset_timer):
                         self.timer = []
                     else:
@@ -837,6 +841,8 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
         self.freq = freq
         self.bandwidth = bandwidth
         self.counting = False
+        self.discarded_requests = 0
+        self.duplicated_requests = 0
 
         self.busy = simpy.Resource(self.env, capacity=1)
         self.onus = [] # "connected" onus
@@ -889,6 +895,7 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                 dprint("Receiving", str(r), "at", str(self.env.now))
                 if(r.ack != self.acks[r.id_sender]): # not aligned acks!
                     dprint(str(self), "received duplicated request at", str(self.env.now))
+                    self.duplicated_requests += 1
                     return None
                 # aligned acks
                 time_to = self.node.time_to_onu(0, r.id_sender)
@@ -912,7 +919,7 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
 
                     yield self.env.process(self.node.send_down(g))
                     self.bandwidth_used.append((g.onu, g.size, g.init_time, g.init_time + time_from))
-                    dprint("Bandwidth available:", self.bandwidth_available, "at", self.env.now)
+                    dprint("Bandwidth available:", self.bandwidth_available(), "at", self.env.now)
                     yield self.env.timeout(self.delay)
                     self.counting = True
                     return None # return none
@@ -924,11 +931,13 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                     if(len(self.node.local_nodes) > 0):
                         # activate more-local PN
                         dprint(str(self), "is activating a more local node at", self.env.now)
+                        self.discarded_requests += 1
                         node = self.node.local_nodes.pop()
                         node.start()
                     else:
                         # no more local nodes!
                         dprint(str(self), "is discarding request: no bandwidth available at", self.env.now)
+                        self.discarded_requests += 1
                         pass
             else:
                 # pass along to another dba
