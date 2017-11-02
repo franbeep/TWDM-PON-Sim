@@ -4,13 +4,14 @@ import random
 import time
 
 DEBUG = False
+simlog = open("simlog.log", "w")
 
 def dprint(*text):
 	if(DEBUG):
-		print("[", time.strftime("%H:%M:%S"),"]:", end="")
+		print("[", time.strftime("%H:%M:%S"),"]:", end="", file=simlog)
 		for t in text:
-			print("", t, end="")
-		print("")
+			print("", t, end="", file=simlog)
+		print("", file=simlog)
 
 # Default attributes
 
@@ -104,11 +105,13 @@ def create_topology(env, qnty_ant, qnty_onu, qnty_pn, qnty_splt, matrix, max_fre
         pn_node = Processing_Node(env, id_pn, None, None, PN_consumption, PN_bitRate_up, PN_bitRate_down, 0, LC=pn_lcs, DU=pn_dus)
 
         # add a Digital Unit with DBA
-        # def __init__(self, env, node, consumption_rate, min_band, max_frequency, enabled=True, delay=0):
-        pn_node.append_DU(DU_consumption, pn_node, -1, enabled=True, vms=[DBA_Assigner(env, pn_node, 0, max_frequency)])
+        control_du = Digital_Unit(env, 0, 0, pn_node, pn_node, vms=[DBA_Assigner(env, pn_node, 0, max_frequency)], enabled=True)
+        pn_node.append_DU(control_du)
+        pn_node.attach_DU(0, 0) # attach DU 0 to LC 0 (-1)
 
         # add a Digital Unit to BB processing (not real BB processing)
-        pn_node.append_DU(DU_consumption, pn_node, 0, enabled=True, vms=[Foo_BB_VM(env)])
+        bb_du = Digital_Unit(env, 1, 0, pn_node, pn_node, vms=[Foo_BB_VM(env)])
+        pn_node.append_DU(bb_du)
 
         nodes.append(pn_node)
         id_pn += 1
@@ -440,14 +443,13 @@ class Processing_Node(Active_Node):
                 return delay_acc + target.delay_up
         return 0
 
-    def append_DU(self, consumption, out, freq, enabled=False, vms=None):
-        du = Digital_Unit(self.env, len(self.DU), consumption, self, out, vms=vms, enabled=enabled)
-        lc = self.LC[freq+1]
-        if(lc.enabled == False):
-            lc.start()
-        lc.out = du
+    def attach_DU(self, du, lc):
+        if(self.LC[lc].enabled is False):
+            self.LC[lc].start()
+        self.LC[lc].out = self.DU[du]
+
+    def append_DU(self, du):
         self.DU.append(du)
-        dprint(str(self), "is creating a Digital_Unit and attaching to", lc)
 
     # upstreaming
     def send_up(self, o):
@@ -901,10 +903,10 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                 time_to = self.node.time_to_onu(0, r.id_sender)
                 time_from = self.node.time_from_onu(r.bandwidth, r.id_sender)
 
-                if(self.bandwidth_available() > 0):
-                    # there is bandwidth
+                if(self.bandwidth_available() >= r.bandwidth):
+                    # there is bandwidth enough for this request
                     g = None
-                    # generate grant
+                    # generate grant(s)
                     self.acks[r.id_sender] += 1
                     if(self.env.now + time_to > self.free_time):
                         # (possibly) first case
@@ -930,7 +932,7 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                     dprint(str(self), "has no bandwidth at", self.env.now)
                     if(len(self.node.local_nodes) > 0):
                         # activate more-local PN
-                        dprint(str(self), "is activating a more local node at", self.env.now)
+                        dprint(str(self), "is activating a more local node randomly at", self.env.now)
                         self.discarded_requests += 1
                         node = self.node.local_nodes.pop()
                         node.start()
@@ -951,7 +953,8 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                 if(len(self.onus) < 0):
                     dprint(str(self), "is going to hibernate at", self.env.now)
                     self.counting = False
-                    self.end()
+                    self.node.LC[self.freq+1].end() # suspend LC linked to this VPON
+                    self.end() # suspend this VPON
             yield self.env.timeout(foo_delay)
 
     def __repr__(self):
@@ -985,19 +988,23 @@ class DBA_Assigner(Active_Node, Virtual_Machine):
                     target_dba = d
             # not fonud! create/assign new VPON/DBA
             dprint(str(self) + ": this ONU hasn't a DBA")
-            if(target_dba == None and len(self.node.LC) > self.available_freq+1):
-                # create, if possible
-                dprint(str(self) + ": Creating DBA at", self.env.now)
-                target_dba = DBA_IPACT(self.env, self.node, 0, self.available_freq, DBA_IPACT_default_bandwidth) # DBA_IPACT_default_bandwidth
-                lc = self.node.LC[self.available_freq+1]
-                if(lc.enabled is False):
-                    lc.start()
-                if(lc.out == None):
-                    lc.out = self.node.DU[1] # guessed baseband DU
-                self.available_freq += 1
-                target_dba.associate_onu(o)
-                yield self.env.process(self.node.DU[0].append_vm(target_dba))
-                self.dbas.append(target_dba)
+            if(target_dba == None):
+                if(len(self.node.LC) > self.available_freq+1):
+                    # create, if possible
+                    dprint(str(self) + ": Creating DBA at", self.env.now)
+                    target_dba = DBA_IPACT(self.env, self.node, 0, self.available_freq, DBA_IPACT_default_bandwidth) # DBA_IPACT_default_bandwidth
+                    lc = self.node.LC[self.available_freq+1]
+                    if(lc.enabled is False):
+                        lc.start()
+                    if(lc.out == None):
+                        lc.out = self.node.DU[1] # guessed baseband DU
+                    self.available_freq += 1
+                    target_dba.associate_onu(o)
+                    yield self.env.process(self.node.DU[0].append_vm(target_dba))
+                    self.dbas.append(target_dba)
+                else:
+                    dprint(str(self.node), "has no bandwidth at", self.env.now)
+                    pass
             else:
                 dprint(str(self) + ": Assigning DBA")
                 # assign
