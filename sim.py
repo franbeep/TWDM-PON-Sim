@@ -2,6 +2,7 @@ import simpy
 import functools
 import random
 import time
+from enum import Enum
 
 DEBUG = False
 simlog = open("simlog.log", "w")
@@ -312,8 +313,9 @@ class Virtual_Machine(object):
 
 # test VM (writing test)
 class Foo_BB_VM(Virtual_Machine):
-    def __init__(self, env):
+    def __init__(self, env, delay=0):
         self.env = env
+        self.delay = delay
 
     def func(self, o):
         if(packet_w != None):
@@ -322,7 +324,7 @@ class Foo_BB_VM(Virtual_Machine):
             if(type(o) is list and type(o[0]) is Packet):
                 for p in o:
                     packet_w.write("{} {} {} {} {} {}\n".format(p.id, p.src, p.init_time, p.waited_time, p.freq, self.env.now))
-            yield self.env.timeout(0)
+            yield self.env.timeout(self.delay)
         return None
 
     def __repr__(self):
@@ -673,7 +675,7 @@ class ONU(Active_Node):
                         yield req
                         self.grants.append(pkt)
                 # many grants
-                if(type(pkt) is list and type(pkt[0]) is Grant and pkt[0].onu == self.id_sender):
+                elif(type(pkt) is list and type(pkt[0]) is Grant and pkt[0].onu == self.id_sender):
                     self.reset_timer = True
                     with self.res_grants.request() as req:
                         yield req
@@ -685,7 +687,7 @@ class ONU(Active_Node):
                         yield req
                         self.hold_down.append(pkt)
 
-            if(up):
+            elif(up):
                 with self.res_hold_up.request() as req:
                     yield req
                     self.hold_up.append(pkt)
@@ -780,6 +782,7 @@ class ONU(Active_Node):
             d.waited_time = self.env.now - d.init_time
             d.freq = grant.freq
 
+        self.freq = grant.freq # tune ONU to freq
         dprint(str(self), "is going to wait", str(to_wait), "at", self.env.now)
         yield self.env.timeout(to_wait)
         yield self.env.process(self.send_up(data_to_transfer))
@@ -812,7 +815,7 @@ class ONU(Active_Node):
                     with self.res_grants.request() as req:
                         yield req
                         dprint(str(self), "is going to use a grant at", self.env.now)
-                        sorted(self.grants, key=lambda grant: grant.init_time) # organiza do menor pro maior
+                        sorted(self.grants, key=lambda grant: grant.init_time) # sort grants, lower to greater time
                         self.env.process(self.use_grant(self.grants.pop(0)))
 
                 if(len(self.hold_down) > 0): # if you got downstreaming data
@@ -903,21 +906,32 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                 time_to = self.node.time_to_onu(0, r.id_sender)
                 time_from = self.node.time_from_onu(r.bandwidth, r.id_sender)
 
-                if(self.bandwidth_available() >= r.bandwidth):
-                    # there is bandwidth enough for this request
+                available_band = self.bandwidth_available()
+                if(available_band > 0):
+                    # there is bandwidth
                     g = None
                     # generate grant(s)
                     self.acks[r.id_sender] += 1
+
+                    send_time = 0
                     if(self.env.now + time_to > self.free_time):
                         # (possibly) first case
-                        g = Grant(r.id_sender, self.env.now + time_to + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
-                        dprint(str(self), "generated", str(g), "at", self.env.now)
-                        self.free_time = self.env.now + time_to + foo_delay + time_from
+                        send_time = self.env.now + time_to + foo_delay
                     else:
                         # normal case
-                        g = Grant(r.id_sender, self.free_time + foo_delay, r.bandwidth, self.freq, self.acks[r.id_sender])
-                        dprint(str(self), "generated", str(g), "at", self.env.now)
-                        self.free_time = self.free_time + foo_delay + time_from
+                        send_time = self.free_time + foo_delay
+
+                    send_size = 0
+                    if(available_band >= r.bandwidth):
+                        print(str(self), "has enough bandwidth for request at", self.env.now)
+                        send_size = r.bandwidth
+                    else:
+                        print(str(self), "hasn't enough bandwidth for request, generating max band at", self.env.now)
+                        send_size = available_band
+
+                    g = Grant(r.id_sender, send_time, send_size, self.freq, self.acks[r.id_sender])
+                    dprint(str(self), "generated", str(g), "at", self.env.now)
+                    self.free_time = send_time + time_from
 
                     yield self.env.process(self.node.send_down(g))
                     self.bandwidth_used.append((g.onu, g.size, g.init_time, g.init_time + time_from))
@@ -928,7 +942,7 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
 
                 else:
                     # no bandwidth
-                    # activate "random" local PN
+                    # activate random local PN
                     dprint(str(self), "has no bandwidth at", self.env.now)
                     if(len(self.node.local_nodes) > 0):
                         # activate more-local PN
@@ -940,7 +954,6 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                         # no more local nodes!
                         dprint(str(self), "is discarding request: no bandwidth available at", self.env.now)
                         self.discarded_requests += 1
-                        pass
             else:
                 # pass along to another dba
                 dprint(str(self),"is passing along object", str(r), "at", str(self.env.now))
