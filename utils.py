@@ -16,10 +16,10 @@ def dprint(*text, objn=0):
 # Enums:
 
 class Event_Type(Enum):
-    TG_SentPacket = 1
-    AN_Started = 2
-    AN_Ended = 3
-    ANT_SentPacket = 4
+    TG_SentPacket = 1           #
+    AN_Started = 2              #
+    AN_Ended = 3                #
+    ANT_SentPacket = 4          #
     DBA_SentGrant = 5
     DBA_Killed = 6
     DBA_DiscardedRequest = 7
@@ -32,11 +32,3 @@ class End_Sim(Enum):
     ByRequestCount = 1
     ByTimeCount = 2
     ByGrantCount = 3
-
-
-
-
-register_event(etype, time, *info)
-Manager.register_event(Event_Type.TG_SentPacket, self.env.now, self.id)
-from manager import Manager
-from utils import Event_Type

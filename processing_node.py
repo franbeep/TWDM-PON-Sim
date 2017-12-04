@@ -5,9 +5,6 @@ from attributes import FOO_DELAY, LIGHT_SPEED
 from utils import dprint
 
 class Processing_Node(Active_Node):
-    self.hold_up = []
-    self.hold_down = []
-
     def __init__(self, env, id, target_up, target_down, consumption_rate, bitRate_up, bitRate_down, distance, enabled=True, DU=[], LC=[]):
         self.env = env
         self.id = id
@@ -19,6 +16,8 @@ class Processing_Node(Active_Node):
         self.res_hold_down = simpy.Resource(self.env, capacity=1)
         self.target_up = target_up
         self.target_down = target_down
+        self.hold_up = []
+        self.hold_down = []
         self.delay_up = distance / float(LIGHT_SPEED)
         Active_Node.__init__(self, env, enabled, consumption_rate, DU + LC, self.env.now)
         self.action = self.env.process(self.run())

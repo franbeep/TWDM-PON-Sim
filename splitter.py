@@ -8,7 +8,8 @@ class Splitter(object):
         self.env = env
         self.id = id
         self.target_up = target_up
-        self.target_down = target_down
+        if target_down is None: self.target_down = []
+        else: self.target_down = target_down
         self.delay_up = distance_up / float(LIGHT_SPEED)
 
     def put(self, pkt, down=False, up=False):

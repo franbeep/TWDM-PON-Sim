@@ -12,20 +12,24 @@ def run(env, ending_type=End_Sim.ByTimeCount, until=0, debug=0):
             val -= 1
         while(debug):
             debug -= val
-            debug += val if debug < 0 else utils.DEBUG_SET.append(val)
+            if debug < 0: debug += val
+            else: DEBUG_SET.append(val)
             val = int(val / 2)
     # start!
     # env.run(until=Manager.create_end_event(env, ending_type, until))
     env.run(until=until)
+    for e in Manager.events:
+        print(e)
 
 # clean current simulation function
 def clean():
     # close log file
     simlog.close()
     # reset Manager
-    Manager.past_events = []
+    Manager.events = []
     Manager.generated_requests = 0
     Manager.lost_requests = 0
     Manager.duplicated_requests = 0
     Manager.generated_grants = 0
     Manager.lost_grants = 0
+

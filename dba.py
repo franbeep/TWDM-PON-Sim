@@ -5,9 +5,6 @@ from abstract_classes import Active_Node, Virtual_Machine
 from attributes import FOO_DELAY, DBA_IPACT_DEFAULT_BANDWIDTH
 from utils import dprint
 
-from manager import Manager
-from utils import Event_Type
-
 class Request(Packet):
     def __init__(self, id, id_sender, freq, bandwidth, ack):
         self.id_sender = id_sender
@@ -31,13 +28,6 @@ class Grant(Packet):
             format(self.onu, self.init_time, self.size, self.freq, self.ack)
 
 class DBA_IPACT(Active_Node, Virtual_Machine):
-    self.counting = False
-    self.discarded_requests = 0
-    self.duplicated_requests = 0
-    self.onus = [] # onus "connected"
-    self.acks = {}
-    self.bandwidth_used = []
-
     def __init__(self, env, node, consumption_rate, freq, bandwidth, busy, delay=0, enabled=True):
         self.env = env
         self.node = node
@@ -46,8 +36,15 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
         self.bandwidth = bandwidth
         self.busy = busy
         self.free_time = self.env.now
+        self.counting = False
+        self.discarded_requests = 0
+        self.duplicated_requests = 0
+        self.onus = [] # onus "connected"
+        self.acks = {}
+        self.bandwidth_used = []
         Active_Node.__init__(self, env, enabled, consumption_rate, [], self.env.now)
         self.action = self.env.process(self.run())
+
 
     def update_bandwidth(self):
         # update bandwidth used
@@ -124,7 +121,6 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
                     self.free_time = send_time + time_from
 
                     self.env.process(self.node.send_down(g))
-                    Manager.register_event(Event_Type.DBA_SentGrant, self.env.now, self.freq)
                     self.bandwidth_used.append((g.onu, g.size, g.init_time, g.init_time + time_from))
                     dprint("Bandwidth available:", self.bandwidth_available(), "at", self.env.now, objn=64)
                     yield self.env.timeout(self.delay)
@@ -166,14 +162,13 @@ class DBA_IPACT(Active_Node, Virtual_Machine):
             format(self.freq, self.free_time)
 
 class DBA_Assigner(Active_Node, Virtual_Machine):
-    self.available_freq = 0
-    self.dbas = []
-    
     def __init__(self, env, node, consumption_rate, max_frequency, enabled=True, delay=0):
         self.env = env
         self.node = node
         self.max_frequency = max_frequency
         self.delay = delay
+        self.available_freq = 0
+        self.dbas = []
         self.busy = simpy.Resource(self.env, capacity=1)
         self.dba_busy = simpy.Resource(self.env, capacity=1)
         Active_Node.__init__(self, env, enabled, consumption_rate, [], self.env.now)

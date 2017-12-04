@@ -24,7 +24,7 @@ import utils
 # DEBUG = 1+4+16+32 # means that only antennas,
 #					# processing nodes, linecards
 # 					# and ONUs do print.
-DEBUG=0
+DEBUG=1
 
 # seed to pseudo random values
 sim.random.seed(13)

@@ -7,6 +7,7 @@ from utils import dprint
 class LineCard(Active_Node):
     def __init__(self, env, freq, delay=0, out=None, enabled=False, consumption=LC_CONSUMPTION):
         self.env = env
+        self.id = None
         self.delay = delay
         self.freq = freq
         self.out = out

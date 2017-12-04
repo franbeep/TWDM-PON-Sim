@@ -4,19 +4,18 @@ import simpy
 from attributes import FOO_DELAY
 from data import Packet
 
-from manager import Manager
+import manager as Manager
 from utils import Event_Type
 
 class Traffic_Generator(object):
-    self.hold = simpy.Store(self.env) # hold data
-    self.trafic_action = env.process(self.trafic_run())
-    self.packets_sent = 0
-
     def __init__(self, env, id, distribution, size):
         self.env = env
         self.id = id
         self.dist = distribution # callable
         self.size = size # callable
+        self.packets_sent = 0
+        self.hold = simpy.Store(self.env) # hold data
+        self.trafic_action = env.process(self.trafic_run())
 
     def trafic_run(self):
         while True:
@@ -32,17 +31,16 @@ class Traffic_Generator(object):
 
 
 class Active_Node(object):
-    self.elapsed_time = 0
-    self.total_time = 0.0
-    self.an_action = env.process(self.an_run())
-    self.obj_sleeping = [] # sleeping objects
-    self.objs = objs # active nodes inside
-
     def __init__(self, env, enabled, consumption_rate, objs, start_time):
         self.env = env
         self.enabled = enabled
         self.consumption_rate = consumption_rate
         self.start_time = start_time
+        self.objs = objs # active nodes inside
+        self.elapsed_time = 0
+        self.total_time = 0.0
+        self.obj_sleeping = [] # sleeping objects
+        self.an_action = env.process(self.an_run())
 
     def start(self):
         self.start_time = self.env.now

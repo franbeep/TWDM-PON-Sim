@@ -7,18 +7,6 @@ from dba import Request, Grant
 from data import Packet
 
 class ONU(Active_Node):
-    self.total_hold_size = 0
-    self.ack = 0
-    self.hold_up = []
-    self.hold_down = []
-    self.grants = []
-    self.requests = []
-    self.timer = []
-    self.waiting = False
-    self.resent = 1
-    self.reset_timer = False
-    self.request_counting = 0
-
     def __init__(self, env, id, target_up, target_down, consumption, cellsite, bitRate_up, bitRate_down, distance, enabled=True, freq=-1, threshold=0):
         self.env = env
         self.id = id
@@ -39,6 +27,18 @@ class ONU(Active_Node):
         self.bitRate_down = bitRate_down
         self.threshold = threshold
 
+        self.total_hold_size = 0
+        self.ack = 0
+        self.hold_up = []
+        self.hold_down = []
+        self.grants = []
+        self.requests = []
+        self.timer = []
+        self.waiting = False
+        self.resent = 1
+        self.reset_timer = False
+        self.request_counting = 0
+
         Active_Node.__init__(self, env, enabled, consumption, [], self.env.now)
         self.action = env.process(self.run())
 
@@ -49,7 +49,6 @@ class ONU(Active_Node):
             total += target.delay_up
             target = target.target_up
         total += target.time_to_onu(0, self.id)
-        dprint(str(self), "calculated RTT:", total, objn=32)
         return total
 
     def end(self):

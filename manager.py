@@ -3,7 +3,7 @@
 from attributes import FOO_DELAY
 from utils import End_Sim
 
-past_events = []
+events = []
 
 generated_requests = 0
 lost_requests = 0
@@ -28,11 +28,11 @@ def create_end_event(env, ending_type, qty):
 		return env.process(count_grant(qty))
 
 # register event that happened
-def register_event(etype, time, *info): past_events.append[(etype.name, time, *info)]
+def register_event(etype, time, *info): events.append((etype.name, time, *info))
 
 # schedule a event to start in [time] seconds
-def schedule_event(env, time, func, *args):
-	def delegator(env, time, func, *args):
+def schedule_event(env, time, func):
+	def delegator(env, time, func):
 		yield env.timeout(time)
-		func(args)
-	env.process(delegator(env, time, func, args))
+		func()
+	env.process(delegator(env, time, func))

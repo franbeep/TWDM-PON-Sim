@@ -3,7 +3,7 @@ from utils import dprint
 from abstract_classes import Traffic_Generator, Active_Node
 from attributes import FOO_DELAY, ANTENNA_SPEED, TG_DEFAULT_DIST, TG_DEFAULT_SIZE
 
-from manager import Manager
+import manager as Manager
 from utils import Event_Type
 
 class Antenna(Traffic_Generator, Active_Node):
@@ -42,3 +42,4 @@ class Antenna(Traffic_Generator, Active_Node):
     def __repr__(self):
         return "Antenna #{}".\
             format(self.id)
+
