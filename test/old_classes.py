@@ -1,3 +1,9 @@
+import simpy
+import functools
+import random
+import time
+from enum import Enum
+
 class Request(object):
     def __init__(self, id, id_sender, id_receiver, id_rrh, id_cellsite, requested_time, bandwidth, route, packages, vpon):
         self.id             = id
@@ -159,4 +165,26 @@ class DBA_default(Active_Node, Virtual_Machine):
             yield self.env.process(self.send_up(data_to_transfer))
         with self.res_grants.request() as req:
             yield req
-            self.gran
+            self.grant
+
+
+# Statistics
+
+output_files = []
+
+# writer class
+class Writer(object):
+    def __init__(self, start="#\n"):
+        filename = time.strftime("%d%m%Y_%H%M%S_output.dat")
+        output_files.append(filename)
+        self.file = open(filename, 'w')
+        dprint("Opening file", filename, "to write.")
+        self.write(start)
+
+    def write(self, text):
+        self.file.write(text)
+
+    def close(self):
+        self.file.close()
+
+packet_w = None

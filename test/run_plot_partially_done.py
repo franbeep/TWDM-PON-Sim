@@ -7,8 +7,8 @@ sim.DEBUG = True
 sim.random.seed(13)
 
 # default values
-sim.tg_default_size = lambda x: 250
-sim.DBA_IPACT_default_bandwidth = 5000
+sim.TG_DEFAULT_SIZE = lambda x: 250
+sim.DBA_IPACT_DEFAULT_BANDWIDTH = 5000
 
 max_onus = 3
 
