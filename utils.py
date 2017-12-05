@@ -16,17 +16,19 @@ def dprint(*text, objn=0):
 # Enums:
 
 class Event_Type(Enum):
-    TG_SentPacket = 1           #
-    AN_Started = 2              #
-    AN_Ended = 3                #
-    ANT_SentPacket = 4          #
+    TG_SentPacket = 1
+    AN_Started = 2
+    AN_Ended = 3
+    ANT_SentPacket = 4
     DBA_SentGrant = 5
-    DBA_Killed = 6
+    DBA_Hibernated = 6
     DBA_DiscardedRequest = 7
-    DBA_Created_VPON = 8
-    PN_ReceivedObject = 9
-    SPLT_ReceivedObject = 10
-    ONU_SentRequest = 11
+    DBA_DuplicatedRequest = 8
+    DBA_Created_VPON = 9
+    PN_ReceivedObject = 10
+    SPLT_ReceivedObject = 11
+    ONU_DiscardedGrant = 12
+    ONU_GenerateRequest = 13
 
 class End_Sim(Enum):
     ByRequestCount = 1

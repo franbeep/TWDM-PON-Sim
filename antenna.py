@@ -36,7 +36,7 @@ class Antenna(Traffic_Generator, Active_Node):
                     yield self.env.timeout(self.delay) # propagation
                     dprint(str(self), "delivered to", str(self.target_up), "at", self.env.now, objn=1)
                     self.env.process(self.target_up.put(pkt, up=True))
-                    Manager.register_event(Event_Type.ANT_SentPacket, self.env.now, self.id)
+                    Manager.register_event(Event_Type.ANT_SentPacket, self.env.now, self, pkt)
             yield self.env.timeout(FOO_DELAY)
 
     def __repr__(self):

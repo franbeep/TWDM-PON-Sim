@@ -1,6 +1,6 @@
 import manager as Manager
 from attributes import *
-from utils import End_Sim, DEBUG_SET, simlog
+from utils import End_Sim, DEBUG_SET, simlog, dprint
 
 
 # start simulation function
@@ -16,10 +16,12 @@ def run(env, ending_type=End_Sim.ByTimeCount, until=0, debug=0):
             else: DEBUG_SET.append(val)
             val = int(val / 2)
     # start!
-    # env.run(until=Manager.create_end_event(env, ending_type, until))
-    env.run(until=until)
-    for e in Manager.events:
-        print(e)
+    env.run(until=Manager.create_end_event(env, ending_type, until))
+    dprint("Generated Requests:", Manager.generated_requests)
+    dprint("Discarded Requests:", Manager.discarded_requests)
+    dprint("Duplicated Requests:", Manager.duplicated_requests)
+    dprint("Generated Grants:", Manager.generated_grants)
+    dprint("Discarded Grants:", Manager.discarded_grants)
 
 # clean current simulation function
 def clean():
@@ -28,8 +30,8 @@ def clean():
     # reset Manager
     Manager.events = []
     Manager.generated_requests = 0
-    Manager.lost_requests = 0
+    Manager.discarded_requests = 0
     Manager.duplicated_requests = 0
     Manager.generated_grants = 0
-    Manager.lost_grants = 0
+    Manager.discarded_grants = 0
 

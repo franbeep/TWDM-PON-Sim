@@ -3,6 +3,9 @@
 from attributes import LIGHT_SPEED
 from utils import dprint
 
+import manager as Manager
+from utils import Event_Type
+
 class Splitter(object):
     def __init__(self, env, id, target_up, target_down, distance_up):
         self.env = env
@@ -24,6 +27,8 @@ class Splitter(object):
         if(up):
             yield self.env.timeout(self.delay_up)
             self.env.process(self.target_up.put(pkt, up=True))
+        Manager.register_event(Event_Type.SPLT_ReceivedObject, self.env.now, self, pkt)
+
 
     def __repr__(self):
         return "Splitter #{}".\

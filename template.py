@@ -3,7 +3,6 @@
 import sim
 import topology
 import simpy
-import random
 import utils
 
 # Defines the classes that will be needed to print
@@ -24,7 +23,7 @@ import utils
 # DEBUG = 1+4+16+32 # means that only antennas,
 #					# processing nodes, linecards
 # 					# and ONUs do print.
-DEBUG=1
+DEBUG=4
 
 # seed to pseudo random values
 sim.random.seed(13)
@@ -72,10 +71,11 @@ nodes[5].end()
 # example: schedule to antenna 0 be disabled in 1 sec
 sim.Manager.schedule_event(env, 1, nodes[0].end)
 
-nodes[0].end
-
 # starts simulation and set to end by time count with 3 secs
-sim.run(env, ending_type=sim.End_Sim.ByTimeCount, until=3, debug=DEBUG)
+# sim.run(env, ending_type=sim.End_Sim.ByTimeCount, until=3, debug=DEBUG)
+
+# starts simulation and set to end by request number
+sim.run(env, ending_type=sim.End_Sim.ByRequestCount, until=100, debug=DEBUG) 
 
 # close file descriptors
 sim.clean()

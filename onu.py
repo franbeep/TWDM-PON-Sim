@@ -1,8 +1,9 @@
 # ONU 32
 import simpy
+import manager as Manager
 from abstract_classes import Active_Node
 from attributes import FOO_DELAY, LIGHT_SPEED
-from utils import dprint
+from utils import dprint, Event_Type
 from dba import Request, Grant
 from data import Packet
 
@@ -96,13 +97,16 @@ class ONU(Active_Node):
     # generate a request
     def gen_request(self):
         dprint(str(self), "is generating a request at", self.env.now, objn=32)
+        Manager.generated_requests += 1
         with self.res_requests.request() as req:
             yield req
-            self.requests.append(Request(self.request_counting, self.id, -1, self.total_hold_size, self.ack))
+            r = Request(self.request_counting, self.id, -1, self.total_hold_size, self.ack)
+            self.requests.append(r)
             if(not self.waiting):
                 self.timer.append(self.round_trip_time() * 2 * self.resent) # 2 x RTT
                 self.reset_timer = False
             self.request_counting += 1
+            Manager.register_event(Event_Type.ONU_GenerateRequest, self.env.now, self, r)
 
     # upstreaming
     def send_up(self, o):
@@ -152,6 +156,7 @@ class ONU(Active_Node):
         if(to_wait < 0):
             # negative time to wait
             dprint(str(self), "is going to discard grant, reason: negative wait time; at", self.env.now, objn=32)
+            Manager.register_event(Event_Type.ONU_DiscardedGrant, self.env.now, self, grant)
             self.env.process(self.gen_request())
 
         data_to_transfer = []
@@ -209,6 +214,7 @@ class ONU(Active_Node):
                         yield req
                         dprint(str(self), "is sending a request at", self.env.now, objn=32)
                         self.env.process(self.send_up(self.requests.pop(0)))
+                    continue
 
                 if(len(self.grants) > 0 and len(self.hold_up) > 0): # if you got grants
                     with self.res_grants.request() as req:
@@ -216,12 +222,14 @@ class ONU(Active_Node):
                         dprint(str(self), "is going to use a grant at", self.env.now, objn=32)
                         sorted(self.grants, key=lambda grant: grant.init_time) # sort grants, lower to greater time
                         self.env.process(self.use_grant(self.grants.pop(0)))
+                    continue
 
                 if(len(self.hold_down) > 0): # if you got downstreaming data
                     with self.res_hold_down as req:
                         yield req
                         dprint(str(self), "is going to send (downstream) at", self.env.now, objn=32)
                         self.env.process(self.send_down(self.hold_down.pop(0)))
+                    continue
 
                 if(len(self.timer) > 0):
                     if(self.reset_timer):

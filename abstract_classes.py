@@ -27,7 +27,7 @@ class Traffic_Generator(object):
             p = Packet(self.packets_sent, self.size(self), self.id, -1, self.env.now)
             self.hold.put(p)
             self.packets_sent += 1
-            Manager.register_event(Event_Type.TG_SentPacket, self.env.now, self.id)
+            Manager.register_event(Event_Type.TG_SentPacket, self.env.now, self.id, p)
 
 
 class Active_Node(object):
@@ -48,7 +48,7 @@ class Active_Node(object):
         for o in self.obj_sleeping:
             o.start()
         self.obj_sleeping = []
-        Manager.register_event(Event_Type.AN_Started, self.env.now, self.id)
+        Manager.register_event(Event_Type.AN_Started, self.env.now, self)
 
     def end(self):
         self.total_time += self.elapsed_time
@@ -58,7 +58,7 @@ class Active_Node(object):
             if(o.enabled is True):
                 self.obj_sleeping.append(o)
                 o.end()
-        Manager.register_event(Event_Type.AN_Ended, self.env.now, self.id)
+        Manager.register_event(Event_Type.AN_Ended, self.env.now, self)
         
     def consumption(self):
         total = 0

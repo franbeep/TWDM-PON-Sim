@@ -1,8 +1,9 @@
 # OLT or local node (fog) 4
 import simpy
+import manager as Manager
 from abstract_classes import Active_Node
 from attributes import FOO_DELAY, LIGHT_SPEED
-from utils import dprint
+from utils import dprint, Event_Type
 
 class Processing_Node(Active_Node):
     def __init__(self, env, id, target_up, target_down, consumption_rate, bitRate_up, bitRate_down, distance, enabled=True, DU=[], LC=[]):
@@ -72,8 +73,7 @@ class Processing_Node(Active_Node):
             self.LC[lc].start()
         self.LC[lc].out = self.DU[du]
 
-    def append_DU(self, du):
-        self.DU.append(du)
+    def append_DU(self, du): self.DU.append(du)
 
     # upstreaming
     def send_up(self, o):
@@ -116,6 +116,7 @@ class Processing_Node(Active_Node):
                 with self.res_hold_up.request() as req:
                     yield req
                     self.hold_up.append(pkt)
+            Manager.register_event(Event_Type.PN_ReceivedObject, self.env.now, self, pkt)
         else:
             dprint(str(self), "is not enabled at", self.env.now, objn=4)
             if(down):
@@ -143,12 +144,14 @@ class Processing_Node(Active_Node):
                                     break
                             if(target_lc != None):
                                 self.env.process(target_lc.put(o))
+                    continue
                 # if any data received from up
                 if(len(self.hold_down) > 0):
                     with self.res_hold_down.request() as req:
                         yield req
                         dprint(str(self), "is going to send (downstream) at", self.env.now, objn=4)
                         self.env.process(self.send_down(self.hold_down.pop(0)))
+                    continue
             yield self.env.timeout(FOO_DELAY)
 
     def __repr__(self):
